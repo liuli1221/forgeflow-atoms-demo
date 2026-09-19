@@ -7,15 +7,20 @@ permissions:
   contents: write
 jobs:
   unpack:
-    if: ${{ hashFiles('forgeflow-release.zip') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Unpack release
+        id: unpack
         run: |
+          if [ ! -f forgeflow-release.zip ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           unzip -o forgeflow-release.zip
           rm forgeflow-release.zip
       - name: Commit extracted project
+        if: steps.unpack.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
