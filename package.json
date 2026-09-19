@@ -1,0 +1,14 @@
+{
+  "name": "forgeflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForgeFlow - a local-agent app builder workbench. No API key, no npm deps, no CDN.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

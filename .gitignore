@@ -1,0 +1,27 @@
+# dependencies (this project intentionally has none, but keep the guard)
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# runtime / build output
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# local scratch
+tmp/
+.tmp/
+coverage/

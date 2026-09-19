@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ForgeFlow · 本地 Agent 应用工作台</title>
+  <meta name="description" content="用自然语言生成一个真实可交互的小型网页应用，计划、执行、代码、预览与版本都在同一个工作台。完全本地运行，无需 API Key。" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f6bed'/%3E%3Cpath d='M9 22V10h13v3h-9v2.5h8V18h-8v4z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./src/styles/base.css" />
+  <link rel="stylesheet" href="./src/styles/workbench.css" />
+  <link rel="stylesheet" href="./src/styles/responsive.css" />
+</head>
+<body>
+  <!-- ---------------------------------------------------------- welcome -->
+  <section id="welcome" class="welcome" hidden>
+    <div class="welcome-inner">
+      <div class="brand-row">
+        <span class="logo">FF</span>
+        <div>
+          <h1>ForgeFlow</h1>
+          <p class="brand-sub">自然语言 → 可交互网页应用的本地工作台</p>
+        </div>
+      </div>
+
+      <p class="lede">
+        描述你想要的小工具，ForgeFlow 的<strong>本地 Agent</strong>会解析需求、生成结构化 AppSpec、
+        等你确认计划后再生成 HTML / CSS / JS 源码，执行确定性校验并加载可直接操作的预览。
+      </p>
+
+      <ul class="value-list">
+        <li><b>真实解析</b>：关键词 + 句式规则识别领域（任务 / 习惯 / 记账 / 反馈）与所需字段，不是换个标题。</li>
+        <li><b>先计划后执行</b>：计划可编辑、可检查，点击批准才会动手。</li>
+        <li><b>真实可交互</b>：生成的应用支持增删改查、搜索、筛选、统计，数据刷新后仍在。</li>
+        <li><b>版本可回溯</b>：每次成功生成形成一个版本，可预览、可一键恢复。</li>
+      </ul>
+
+      <div class="honesty">
+        <span class="pill">Local Agent</span>
+        <span class="pill">无需 API Key</span>
+        <span class="pill">零依赖 / 零 CDN</span>
+        <p>
+          说明：这里的 Agent 是<strong>运行在你浏览器里的确定性规则引擎</strong>（解析器 + 规划器 + 代码生成器 + 校验器），
+          不调用任何外部大模型，也不会把你的输入发送到任何服务器。
+        </p>
+      </div>
+
+      <div class="welcome-actions">
+        <button id="welcome-create" class="btn primary lg" type="button">创建第一个项目</button>
+        <button id="welcome-demo" class="btn ghost lg" type="button">直接看预置演示</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- workbench -->
+  <div id="workbench" class="workbench" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo sm">FF</span>
+        <strong class="product">ForgeFlow</strong>
+        <span class="badge">Local Agent · 无需 API Key</span>
+      </div>
+      <div class="topbar-right">
+        <span id="project-title" class="project-title"></span>
+        <button id="btn-export" class="btn tiny" type="button">导出 JSON</button>
+        <button id="btn-import" class="btn tiny" type="button">导入 JSON</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden />
+      </div>
+    </header>
+
+    <div class="columns" id="columns" data-mobile-view="chat">
+      <!-- left ------------------------------------------------------- -->
+      <aside class="col col-left">
+        <div class="col-head">
+          <span>项目</span>
+          <button id="btn-new-project" class="btn tiny" type="button">+ 新建</button>
+        </div>
+        <ul id="project-list" class="project-list"></ul>
+
+        <div class="col-head divider"><span>对话</span><span id="agent-state" class="state-chip">idle</span></div>
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+
+        <div id="suggestions" class="suggestions"></div>
+
+        <form id="composer" class="composer">
+          <textarea id="prompt-input" rows="3" placeholder="例如：做一个面试任务管理器，支持优先级、分类筛选和进度统计"></textarea>
+          <div class="composer-row">
+            <span id="composer-hint" class="hint"></span>
+            <button id="btn-send" class="btn primary" type="submit">发送给 Agent</button>
+          </div>
+        </form>
+      </aside>
+
+      <!-- center ----------------------------------------------------- -->
+      <section class="col col-center">
+        <div class="col-head"><span>Agent 计划 / 运行轨迹</span></div>
+        <div class="col-body">
+          <div id="plan-panel" class="plan-panel"></div>
+          <div id="trace-panel" class="trace-panel"></div>
+        </div>
+      </section>
+
+      <!-- right ------------------------------------------------------ -->
+      <section class="col col-right">
+        <div class="col-head tabs" role="tablist">
+          <button class="tab active" data-tab="preview" type="button" role="tab">预览</button>
+          <button class="tab" data-tab="code" type="button" role="tab">代码</button>
+          <button class="tab" data-tab="console" type="button" role="tab">Console</button>
+          <button class="tab" data-tab="versions" type="button" role="tab">版本</button>
+        </div>
+
+        <div class="col-body viewer">
+          <div id="tab-preview" class="tab-panel active">
+            <div class="viewer-toolbar">
+              <span id="preview-label" class="hint"></span>
+              <div class="spacer"></div>
+              <button id="btn-reload-preview" class="btn tiny" type="button">重新加载</button>
+              <button id="btn-open-blank" class="btn tiny" type="button">新窗口打开</button>
+            </div>
+            <div class="preview-stage">
+              <iframe
+                id="preview-frame"
+                title="生成的应用预览"
+                sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                referrerpolicy="no-referrer"></iframe>
+              <div id="preview-empty" class="preview-empty">还没有生成任何应用。在左侧描述你的需求，批准计划后即可在这里预览。</div>
+            </div>
+          </div>
+
+          <div id="tab-code" class="tab-panel">
+            <div class="viewer-toolbar">
+              <div id="file-tabs" class="file-tabs"></div>
+              <div class="spacer"></div>
+              <button id="btn-copy-code" class="btn tiny" type="button">复制</button>
+              <button id="btn-download-file" class="btn tiny" type="button">下载当前文件</button>
+              <button id="btn-download-all" class="btn tiny" type="button">下载全部</button>
+            </div>
+            <pre id="code-view" class="code-view"><code>尚未生成代码。</code></pre>
+          </div>
+
+          <div id="tab-console" class="tab-panel">
+            <div class="viewer-toolbar">
+              <span class="hint">运行日志（Builder + 预览应用）</span>
+              <div class="spacer"></div>
+              <button id="btn-clear-console" class="btn tiny" type="button">清空</button>
+            </div>
+            <div id="console-view" class="console-view"></div>
+          </div>
+
+          <div id="tab-versions" class="tab-panel">
+            <div class="viewer-toolbar">
+              <span class="hint">每次校验通过才会写入版本</span>
+            </div>
+            <div id="version-list" class="version-list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="mobile-nav" id="mobile-nav">
+      <button class="mnav active" data-view="chat" type="button">对话</button>
+      <button class="mnav" data-view="plan" type="button">计划</button>
+      <button class="mnav" data-view="viewer" type="button">预览</button>
+    </nav>
+  </div>
+
+  <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+  <script type="module" src="./src/ui/app.js"></script>
+</body>
+</html>

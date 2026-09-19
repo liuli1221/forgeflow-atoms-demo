@@ -1,0 +1,180 @@
+# ForgeFlow 架构说明
+
+## 1. 设计目标与约束
+
+| 约束 | 决策 |
+|------|------|
+| 线上 Demo 不能要 API Key | 用**确定性本地 Agent**（解析器 + 规划器 + 生成器 + 校验器）替代 LLM，并在 UI/文档中如实标注 |
+| 不能依赖 CDN / npm | 原生 HTML + CSS + ES Modules；`package.json` 无 `dependencies`；`server.mjs` 只用 `node:http` / `node:fs` |
+| 可直接部署 GitHub Pages | 纯静态、全相对路径、无构建步骤 |
+| 可测试 | 所有业务逻辑放在 `src/core/`，**不引用任何 DOM/BOM 全局**，`node --test` 可以直接 import |
+
+## 2. 分层
+
+```
+┌──────────────────────────── src/ui（视图层，唯一接触 DOM 的地方）─────────────────────────────┐
+│ app.js（控制器）  store.js（状态容器+持久化）  preview-bridge.js（iframe 宿主）               │
+│ sidebar.js / plan-view.js / viewer.js（纯渲染）  dom.js（el 工具）  toast.js                  │
+└───────────────────────────────────────────┬──────────────────────────────────────────────────┘
+                                            │ 只调用纯函数，不反向依赖
+┌───────────────────────────────────────────▼──────────── src/core（纯逻辑层，DOM-free）───────┐
+│ parser.js  mutator.js  blueprints.js  spec-schema.js                                         │
+│ planner.js  agent.js（状态机）  generator/*  validator.js  versions.js  storage.js  seed.js   │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+依赖方向是单向的：`ui → core`。core 内部也保持单向：
+`blueprints → parser/mutator → planner → agent → generator → validator → versions → storage`。
+
+## 3. 核心数据结构：AppSpec
+
+AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用户原始文本用于代码生成——
+`sourcePrompt` 只作为数据被 `JSON.stringify` 内联，用于展示和追溯。
+
+```jsonc
+{
+  "specVersion": 1,
+  "appId": "app_xxx",              // 业务数据的存储命名空间，增量修改时保持不变
+  "appName": "面试准备计划器",
+  "tagline": "...",
+  "domain": "task",                // task | habit | budget | feedback | generic
+  "flavor": "interview",           // 命中「面试」语境时切换分类预设
+  "entityName": "任务",
+  "theme":  { "mode": "light", "accent": "#4f6bed", "density": "comfortable" },
+  "layout": { "view": "cards", "showSearch": true, "showFilters": true, "showStats": true },
+  "fields": [
+    { "key": "title", "label": "任务名称", "type": "text", "primary": true, "required": true },
+    { "key": "priority", "label": "优先级", "type": "select", "options": ["高","中","低"], "default": "中" }
+  ],
+  "filters": [ { "key": "filter_category", "field": "category", "label": "分类" } ],
+  "metrics": [
+    { "key": "done_rate", "label": "完成率", "type": "percent",
+      "where": { "field": "status", "value": "已完成" }, "format": "percent" }
+  ],
+  "seedItems": [ { "title": "整理项目复盘文档", "...": "..." } ],
+  "sourcePrompt": "做一个面试准备计划器，支持…",
+  "createdAt": "2026-09-19T…"
+}
+```
+
+`spec-schema.js` 对上述结构做字段级校验：
+枚举合法性、`key` 正则 `^[a-z][a-z0-9_]{0,31}$`、key 唯一、必须有 `primary` 字段、
+`select` 必须有 `options`、`filters/metrics` 引用的字段必须存在、`percent` 必须带 `where`、
+`delta` 必须同时有 `plusWhere/minusWhere`。校验**永不抛异常**，只返回 `{ok, errors, warnings}`。
+
+## 4. 自然语言解析（parser.js）
+
+不是「换个标题」，而是四步真实分析：
+
+1. **领域打分**：`DOMAIN_KEYWORDS` 四张关键词表逐个统计命中，按 `max(2, 关键词长度)` 加权求和，取最高分；
+   全部为 0 时落 `generic` 并置 `analysis.fallback = true`。
+2. **否定识别**：`negatedAt()` 回看关键词前 6 个字符，命中 `不需要/不要/无需/去掉/移除/取消/关闭/without` 时，
+   该命中记入 `negated` 而不是 `hits`。因此「不需要统计」会关闭统计模块而不是打开它。
+3. **特性抽取**：`FEATURE_KEYWORDS` 决定加载哪些**可选字段**（优先级、截止日期、评分、连续天数、支付方式…），
+   `LAYOUT_KEYWORDS / VIEW_KEYWORDS / THEME_KEYWORDS` 决定搜索/筛选/统计开关、视图、明暗主题。
+4. **名称抽取**：切到第一个分句 → 反复剥离引导动词（帮我/我想/做/搞/create/build…）与量词（一个/一款/a/an）
+   → 去掉尾部噪声（的网页/的小程序…）→ 长度不合理时回落蓝图默认名。
+
+领域蓝图 `blueprints.js` 提供 `baseFields`（必备）、`optionalFields`（按需）、`filterFields`、
+`doneField`（完成语义），以及 `buildMetrics()` / `buildSeedItems()`——
+指标只会引用**实际存在**的字段，所以「去掉优先级」之后不会残留悬空指标。
+
+## 5. 增量修改（mutator.js）
+
+`applyModification(spec, instruction)` 返回 `{ok, spec, changes, notes}`，**输入对象不可变**。
+识别 8 类操作：改名、明暗主题、主题色、视图、模块开关、已知可选字段增删、自定义字段、下拉新增选项。
+`intentAround()` 用关键词前 8 字符判断是「增加」还是「去掉」。
+
+任何字段变更后都会重跑 `rebuildFilters / rebuildMetrics / syncSeedItems`，保证 spec 始终自洽。
+**一个都没识别出来时返回 `ok:false` 并原样返回旧 spec**——降级而不是乱改。
+
+## 6. 状态机（agent.js）
+
+```
+idle ──prepareRequest()──▶ awaiting_approval ──approve()──▶ running ──┬─▶ ready
+  ▲                              ▲                                    ├─▶ failed（旧版本保留）
+  └──────── discard() ───────────┴──────── cancel() ───────────────────┘
+```
+
+- `prepareRequest()`：
+  - 项目无 spec → `parsePrompt`（create）
+  - 项目有 spec → 先试 `applyModification`（modify）；不认识就再试 `parsePrompt`，
+    若命中明确领域则按「重建」处理但**沿用同一个 `appId`**（业务数据不丢）；否则返回失败。
+- `executeRun()`：顺序发出六个阶段的 `running/done/failed/cancelled` 事件，
+  每个阶段之间检查 `shouldCancel()`；`sleep`/`tick` 可注入，所以测试里是零延迟同步执行。
+- **只有 validate 全部通过才创建 READY 版本**；失败时 `version = null`，
+  控制器不会覆盖 `project.spec / project.files`，当前版本原封不动。
+
+## 7. 代码生成（generator/）
+
+| 文件 | 产出 |
+|------|------|
+| `html.js` | 静态外壳。所有来自用户的文本（应用名、tagline、实体名）走 `escapeHtml` |
+| `css.js`  | 由 `theme.accent/mode/density` 派生 CSS 变量，含 `@media (max-width: 640px)` |
+| `js.js`   | 运行时。AppSpec 经 `toSafeJson()` 注入 |
+| `index.js`| 组装 + `buildPreviewDocument()` 把三件套内联成单文档 |
+
+**安全模型**：
+- `toSafeJson()` 把 `<` `>` `U+2028` `U+2029` 转成 `\u003c` 等转义序列 →
+  用户就算输入 `</script><script>alert(1)</script>`，也无法从内联脚本里逃逸。
+- 生成的运行时**只用 `createElement` / `textContent` / `createTextNode`**，
+  完全不使用 `innerHTML`、`eval`、`new Function`、`document.write`；`validator.js` 会把这条当作硬性检查。
+- 预览文档只允许出现 **1 个 `<script>` 标签**，也是一条校验项。
+
+## 8. 校验（validator.js）
+
+15 项确定性检查：AppSpec schema、三个文件存在且非空、doctype/结束标签、挂载点、viewport（warn）、
+script 标签数量、CSS 主题变量、CSS 断点（warn）、`[hidden]` 强制隐藏门禁、`app.js` 语法（用 `new Function(source)` 只解析不执行）、
+禁用 API、AppSpec 以数据形式注入、持久化通道存在、无未转义标签、预览文档可组装。
+
+任何一项 `fail` → 整个 run 失败。`warn` 不阻断。
+
+## 9. 预览与数据持久化
+
+```
+┌── Builder（正常同源页面）───────────────────────────────┐
+│ preview-bridge.js                                       │
+│   ├─ 收到 {source:'forgeflow-app', type:'ready'}        │
+│   │     → 读 localStorage['forgeflow.appdata.<appId>']  │
+│   │     → post {source:'forgeflow-host', type:'init'}   │
+│   ├─ 收到 type:'save' → 校验 key 前缀后写入 localStorage │
+│   └─ 收到 type:'log'  → 打到 Console 面板               │
+└───────────────┬─────────────────────────────────────────┘
+                │ postMessage
+┌───────────────▼── iframe srcdoc ────────────────────────┐
+│ sandbox="allow-scripts allow-forms allow-popups         │
+│          allow-popups-to-escape-sandbox"                │
+│ 注意：**没有 allow-same-origin** → 不可访问宿主 DOM/存储 │
+│ 生成应用：embedded 时走 postMessage，独立打开时走自己的  │
+│ localStorage（同一份 app.js 两种模式都能跑）             │
+└──────────────────────────────────────────────────────────┘
+```
+
+为什么不加 `allow-same-origin`：`allow-scripts + allow-same-origin` 组合等于沙箱形同虚设
+（脚本可以移除自身 sandbox 属性）。代价是 iframe 内没有可用的 `localStorage`，
+所以用 postMessage 把持久化交给宿主——顺带也让 Builder 能统计、导出这些业务数据。
+
+宿主侧还做了两道防护：`ev.source !== frame.contentWindow` 的来源检查，
+以及写入 key 必须以 `forgeflow.appdata.` 开头。
+
+## 10. 持久化与导入导出（storage.js）
+
+| key | 内容 |
+|-----|------|
+| `forgeflow.v1.state` | 全部 Builder 状态：projects、messages、AppSpec、pendingPlan、runEvents、versions、生成文件、当前版本指针 |
+| `forgeflow.appdata.<appId>` | 某个生成应用内部的业务数据 |
+
+- `createStorage(backend)` 的 backend 可注入：浏览器用 `browserBackend(localStorage)`，
+  测试用 `memoryBackend()`；隐私模式下探测失败会自动退回内存并提示用户。
+- `loadState()` 对损坏 JSON 返回空状态而不是抛异常；`activeProjectId` 指向已删项目时自动修正。
+- 导出格式 `{kind:'forgeflow.project', version:1, project, appData}`，
+  `parseImport()` 逐项校验 kind/version/project 并给出中文原因；id 冲突时 `dedupeProjectId()` 重新分配。
+
+## 11. UI 与响应式
+
+- 桌面：`grid-template-columns: 320px minmax(280px,1fr) minmax(360px,1.25fr)`。
+- ≤1180px 收窄；≤1000px 变两列（左栏跨两行）；≤760px 变单栏 + 固定底部导航（对话/计划/预览）。
+- `prefers-reduced-motion` 下关闭动画。
+- 渲染函数全部是「清空 + 重建」的幂等函数，唯一的例外是预览 iframe：
+  用 `loadedPreviewKey = projectId:versionId` 做守卫，只有版本真正变化时才重设 `srcdoc`，
+  避免每次渲染都把用户正在操作的应用重置掉。
