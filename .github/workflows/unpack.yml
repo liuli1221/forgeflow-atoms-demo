@@ -1,0 +1,24 @@
+name: Unpack ForgeFlow release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  unpack:
+    if: ${{ hashFiles('forgeflow-release.zip') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack release
+        run: |
+          unzip -o forgeflow-release.zip
+          rm forgeflow-release.zip
+      - name: Commit extracted project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: publish ForgeFlow source"
+          git push
