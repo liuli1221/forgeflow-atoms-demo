@@ -62,6 +62,7 @@ WorkBuddy 侧的执行策略：先建任务清单（4 个阶段），再按 core
 | S4 | 首轮文档 + 本地 Git 提交 | ✅ 完成 |
 | S5 | 真实浏览器发现 P0、修复 CSS 级联并增加发布门禁 | ✅ 完成（64 passed / 0 failed） |
 | S6 | 连接 Chrome 完整验收：生成、CRUD、刷新、增量修改、恢复、导出 | ✅ 完成 |
+| S7 | 发布公开 GitHub 仓库与 GitHub Pages，并做公网冒烟验收 | ✅ 完成 |
 
 ---
 
@@ -211,11 +212,19 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 
 仍未做：真实移动端视口调整、跨浏览器测试，以及 Playwright/Puppeteer 的可重复 CI E2E。
 
+### 6.4 公开交付验证
+
+- GitHub 源码：https://github.com/liuli1221/forgeflow-atoms-demo
+- 在线 Demo：https://liuli1221.github.io/forgeflow-atoms-demo/
+- GitHub Actions 的 `pages-build-deployment` 实际运行成功（36 秒）。
+- 在公网 Demo 中实际打开欢迎页、点击「直接看预置演示」，确认 Builder、预置版本、15 项校验结果和 sandbox 交互应用均能加载。
+- 终端没有可用的 GitHub HTTPS/SSH 凭据，因此发布采用已登录 GitHub 网页上传发布包，再由一次性 Actions 工作流在仓库内解包并提交完整目录。首版工作流错误地在 job 级使用 `hashFiles`，运行失败；改为幂等 shell 检查后第二次运行成功，发布包已从仓库删除，源码目录完整展开。失败过程保留在 Actions 历史中，未伪装成一次成功。
+
 ---
 
 ## 7. 未完成项 / 明确不在范围内
 
-- **没有部署到 GitHub Pages，也没有推送到任何远程仓库。** 仓库只在本地 `git init` 并提交。
+- 已完成 GitHub 与 Pages 公开交付；本地仓库保留原始 WorkBuddy 提交历史，远端网页发布采用独立提交历史（原因见 6.4）。
 - **没有可重复运行的 Playwright/Puppeteer E2E**；当前浏览器证据来自连接 Chrome 的一次真实交互验收。
 - 没有真实移动端视口与跨浏览器验收；移动端目前是 CSS 断点静态审查。
 - 没有做多语言（界面为简体中文）。
@@ -258,3 +267,4 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 - **S4 完成**：README / architecture / 本文件与首轮本地 Git 提交。WorkBuddy 随后尝试安装可选 Playwright 浏览器，但下载卡住后被取消；没有把这次尝试记成 E2E 结果。
 - **S5 完成**：真实 Chrome 首次打开预置版本时发现 `#overlay.hidden=true` 但 computed `display=flex`；WorkBuddy 修复 Builder 与生成应用的全局 `[hidden]` 规则，在 validator 增加 `css-hidden` 硬门禁，并新增 9 个回归用例。第二个 WorkBuddy 收尾响应被客户端取消，但 7 个文件的改动已落盘。
 - **S6 完成**：当前会话独立执行 `node --test`（64/64）并连接 Chrome 跑通新建项目、计划审批、生成、预览 CRUD、刷新持久化、增量修改、v1 恢复、代码查看与 JSON 导出；具体证据见 6.3。
+- **S7 完成**：创建公开仓库 `liuli1221/forgeflow-atoms-demo`；在终端 HTTPS/SSH 凭据均不可用时，改用 GitHub 网页上传 + 一次性 Actions 解包，第二次工作流成功；启用 `main/(root)` Pages，`pages-build-deployment` 成功，并在公网地址完成欢迎页和预置演示冒烟验收。

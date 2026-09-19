@@ -204,3 +204,12 @@ $ curl -s http://127.0.0.1:4173/src/styles/base.css | grep hidden
 ```
 
 即：静态资源可访问、修复进入本地产物；随后真实 Chrome 也验证了初始弹层隐藏、点击后表单字段出现以及保存成功。CSS 级联求解器负责把这次人工发现固化成可重复回归。
+
+## 6. 公网部署验证
+
+- GitHub：`https://github.com/liuli1221/forgeflow-atoms-demo`
+- Pages：`https://liuli1221.github.io/forgeflow-atoms-demo/`
+- `pages-build-deployment` 成功完成；公开 URL 返回 ForgeFlow 页面而非 404。
+- 在公开 URL 上点击「直接看预置演示」，预置项目、15 项校验结果、预览 iframe 与示例数据均成功加载。
+
+公网验证是一次真实 Chrome 冒烟测试；它不替代尚未建立的 Playwright/Puppeteer CI E2E。

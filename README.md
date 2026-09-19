@@ -6,6 +6,9 @@
 ForgeFlow 是一个 Atoms-like 的「自然语言生成小型网页应用」工作台 Demo。
 它不调用任何外部大模型，而是用一条**确定性流水线**真实完成工作：
 
+- **在线 Demo**：https://liuli1221.github.io/forgeflow-atoms-demo/
+- **GitHub 源码**：https://github.com/liuli1221/forgeflow-atoms-demo
+
 ```
 自然语言 → 规则解析器 → AppSpec（结构化契约） → 人工批准 → 代码生成器 → 确定性校验 → READY 版本 → sandbox 预览
 ```
