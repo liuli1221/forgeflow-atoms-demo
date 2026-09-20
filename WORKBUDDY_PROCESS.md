@@ -1,11 +1,6 @@
 # WORKBUDDY_PROCESS.md
 
 使用 WorkBuddy 完成 ForgeFlow（Atoms-like Demo）的完整过程记录。
-按时间/阶段推进，**只记录实际发生的事**；未执行的内容不写入。
-
-- 日期：2026-09-19
-- 工作目录：`/Users/lilianlliu/Documents/Codex/2026-09-19/w/atomlite-workbuddy`
-- 运行环境：macOS (darwin-arm64) · Node v22.22.2 · git 2.48.1
 
 ---
 
