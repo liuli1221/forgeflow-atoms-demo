@@ -18,6 +18,11 @@ const DOMAIN_LABEL = {
   habit: '习惯打卡型（habit）',
   budget: '收支记账型（budget）',
   feedback: '反馈收集型（feedback）',
+  inventory: '库存管理型（inventory）',
+  crm: '客户关系型（crm）',
+  event: '活动日程型（event）',
+  library: '图书借阅型（library）',
+  custom: '自定义 Schema（custom）',
   generic: '通用型（generic 兜底）',
 };
 

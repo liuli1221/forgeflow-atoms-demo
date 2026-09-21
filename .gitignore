@@ -1,6 +1,8 @@
-# dependencies (this project intentionally has none, but keep the guard)
+# installed dependencies
 node_modules/
-package-lock.json
+.data/
+test-results/
+playwright-report/
 pnpm-lock.yaml
 yarn.lock
 

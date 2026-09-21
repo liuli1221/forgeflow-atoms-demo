@@ -6,7 +6,7 @@
  * requests, handles negations ("不需要搜索"), extracts an app name and then
  * assembles a structured AppSpec. Pure + DOM-free so it is unit-testable.
  */
-import { uid, uniqueBy } from './util.js';
+import { uid, uniqueBy, slugKey } from './util.js';
 import { getBlueprint, categoryOptions, buildMetrics, buildSeedItems } from './blueprints.js';
 
 export const DOMAIN_KEYWORDS = {
@@ -14,6 +14,10 @@ export const DOMAIN_KEYWORDS = {
   habit: ['习惯', '打卡', '坚持', '自律', '连续天数', '日常', 'habit', 'streak', 'routine', 'checkin', '签到'],
   budget: ['记账', '收支', '预算', '账本', '开销', '花销', '消费', '理财', '财务', '报销', 'budget', 'expense', 'finance', 'money'],
   feedback: ['反馈', '评价', '意见', '建议', '满意度', '打分', '评分表', 'feedback', 'review', 'survey', '投诉', '复盘记录'],
+  inventory: ['库存', '仓库', '入库', '出库', '补货', 'sku', 'inventory', 'stock', '物料'],
+  crm: ['客户管理', '客户跟进', '销售线索', '商机', 'crm', 'customer', '销售漏斗'],
+  event: ['活动管理', '日程管理', '会议安排', '活动报名', 'event', 'schedule', 'calendar'],
+  library: ['图书管理', '书籍管理', '借阅', '书库', 'library', 'book'],
 };
 
 export const FEATURE_KEYWORDS = {
@@ -28,6 +32,11 @@ export const FEATURE_KEYWORDS = {
   target: ['目标次数', '目标值', '目标', 'target', 'goal'],
   method: ['支付方式', '付款方式', 'payment'],
   amount: ['金额', '数量', '价格', 'amount', 'price'],
+  price: ['单价', '售价', '价格', 'price'],
+  supplier: ['供应商', '供货商', 'supplier'],
+  threshold: ['补货阈值', '安全库存', 'threshold'],
+  capacity: ['人数上限', '容量', 'capacity'],
+  isbn: ['isbn', '书号'],
 };
 
 export const LAYOUT_KEYWORDS = {
@@ -147,11 +156,84 @@ function buildFields(domain, flavor, features) {
   });
 }
 
+function inferCustomField(descriptor, index) {
+  const clean = String(descriptor || '')
+    .replace(/^[-*\d.、\s]+/, '')
+    .replace(/(?:这个)?(?:字段|列|属性)$/u, '')
+    .trim();
+  if (!clean || clean.length > 40) return null;
+
+  const match = clean.match(/^([^（(\[【:：]{1,20})(?:[（(\[【:：]([^）)\]】]{1,120})[）)\]】]?)?$/u);
+  const label = (match ? match[1] : clean).replace(/(?:必填|可选)$/u, '').trim();
+  if (!label || /^(搜索|筛选|统计|暗色|亮色|表格|卡片)$/u.test(label)) return null;
+
+  const optionText = match && match[2] ? match[2].trim() : '';
+  const options = optionText
+    ? optionText.split(/[\/|、，,]/u).map((x) => x.trim()).filter(Boolean).slice(0, 12)
+    : [];
+  let type = 'text';
+  if (options.length >= 2) type = 'select';
+  else if (/备注|描述|说明|详情|内容|笔记/u.test(label)) type = 'textarea';
+  else if (/日期|时间|生日|截止|期限/u.test(label)) type = 'date';
+  else if (/是否|启用|完成|已读|选中/u.test(label)) type = 'checkbox';
+  else if (/金额|价格|费用|数量|库存|评分|分数|次数|体重|年龄|容量|比例/u.test(label)) type = 'number';
+
+  const field = {
+    key: slugKey(label, `field${index + 1}`),
+    label,
+    type,
+    required: /必填/u.test(clean),
+  };
+  if (index === 0) field.primary = true;
+  if (type === 'select') {
+    field.options = options;
+    field.default = options[0];
+  } else if (type === 'number') field.default = 0;
+  else if (type === 'checkbox') field.default = false;
+  return field;
+}
+
+/** Extract an explicit schema such as “字段包括书名、作者、评分、状态(在库/借出)”. */
+export function extractCustomFields(rawPrompt) {
+  const text = String(rawPrompt || '');
+  const match = text.match(/(?:字段(?:包括|包含|有|为)?|包含以下字段|记录字段)\s*[:：]?\s*([^。；;\n]{2,260})/iu);
+  if (!match) return [];
+  const section = match[1]
+    .replace(/[，,]\s*(?:并且|同时|另外)?\s*(?:支持|需要|带有)\s*(?:搜索|筛选|统计|暗色|亮色|表格|卡片).*$/u, '')
+    .trim();
+  const descriptors = [];
+  let current = '';
+  let depth = 0;
+  for (const char of section) {
+    if ('（(【['.includes(char)) depth += 1;
+    if ('）)】]'.includes(char)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && /[、，,]/u.test(char)) {
+      if (current.trim()) descriptors.push(current.trim());
+      current = '';
+    } else current += char;
+  }
+  if (current.trim()) descriptors.push(current.trim());
+  return uniqueBy(
+    descriptors.map((part, index) => inferCustomField(part, index)).filter(Boolean),
+    (field) => field.key,
+  ).slice(0, 12).map((field, index) => ({ ...field, primary: index === 0 }));
+}
+
+function inferEntityName(appName) {
+  const value = String(appName || '')
+    .replace(/(?:管理器|管理系统|系统|应用|工具|平台|小程序|档案)$/u, '')
+    .trim();
+  return value && value.length <= 10 ? value : '记录';
+}
+
 function buildFilters(domain, fields, enabled) {
   if (!enabled) return [];
   const bp = getBlueprint(domain);
-  return bp.filterFields
+  const preferred = bp.filterFields
     .map((key) => fields.find((x) => x.key === key))
+    .filter(Boolean);
+  const explicitSelects = fields.filter((field) => field.type === 'select');
+  return uniqueBy(preferred.concat(explicitSelects), (field) => field.key)
     .filter(Boolean)
     .filter((x) => x.type === 'select')
     .map((x) => ({ key: `filter_${x.key}`, field: x.key, label: x.label }));
@@ -175,6 +257,7 @@ export function parsePrompt(rawPrompt, options = {}) {
     removed: [],
     notes: [],
     fallback: false,
+    customFields: [],
   };
 
   if (typeof rawPrompt !== 'string') {
@@ -195,14 +278,18 @@ export function parsePrompt(rawPrompt, options = {}) {
 
   const domainInfo = detectDomain(text);
   const flavor = detectFlavor(text);
-  const domain = domainInfo.domain;
+  const explicitFields = extractCustomFields(trimmed);
+  const domain = domainInfo.domain === 'generic' && explicitFields.length >= 2 ? 'custom' : domainInfo.domain;
   analysis.domain = domain;
   analysis.confidence = Number(domainInfo.confidence.toFixed(2));
   analysis.matched = domainInfo.matched;
   analysis.flavor = flavor;
+  analysis.customFields = explicitFields.map((field) => ({ key: field.key, label: field.label, type: field.type }));
   if (domain === 'generic') {
     analysis.fallback = true;
-    analysis.notes.push('未命中 task / habit / budget / feedback 领域关键词，使用通用模板兜底。');
+    analysis.notes.push('未命中已知领域且没有显式字段定义，使用通用模板兜底。');
+  } else if (domain === 'custom') {
+    analysis.notes.push(`识别到 ${explicitFields.length} 个显式字段，使用自定义 Schema 生成应用。`);
   }
 
   // --- feature detection -------------------------------------------------
@@ -220,7 +307,7 @@ export function parsePrompt(rawPrompt, options = {}) {
     }
   }
   // Sensible defaults: every app gets a notes field unless explicitly refused.
-  if (features.notes === undefined && bp.optionalFields.notes) features.notes = true;
+  if (features.notes === undefined && bp.optionalFields.notes && explicitFields.length === 0) features.notes = true;
 
   // --- layout / theme ----------------------------------------------------
   const layout = { view: 'cards', showSearch: true, showFilters: true, showStats: true };
@@ -252,19 +339,27 @@ export function parsePrompt(rawPrompt, options = {}) {
     mode = 'light';
   }
 
-  const fields = buildFields(domain, flavor, features);
+  let fields = buildFields(domain, flavor, features);
+  if (explicitFields.length) {
+    const existingLabels = new Set(fields.map((field) => field.label.toLowerCase()));
+    const additions = explicitFields.filter((field) => !existingLabels.has(field.label.toLowerCase()));
+    fields = domain === 'custom' ? explicitFields : fields.concat(additions);
+    fields = uniqueBy(fields, (field) => field.key).slice(0, 12);
+    fields = fields.map((field, index) => ({ ...field, primary: index === 0 }));
+  }
   const filters = buildFilters(domain, fields, layout.showFilters);
   const metrics = layout.showStats ? buildMetrics(domain, fields) : [{ key: 'total', label: '总数', type: 'count', format: 'number' }];
   const seedItems = buildSeedItems(domain, fields, flavor);
 
+  const appName = (options.appName || extractAppName(trimmed, domain)).slice(0, 40);
   const spec = {
     specVersion: 1,
     appId: options.appId || uid('app'),
-    appName: (options.appName || extractAppName(trimmed, domain)).slice(0, 40),
+    appName,
     tagline: bp.tagline,
     domain,
     flavor,
-    entityName: bp.entityName,
+    entityName: domain === 'custom' ? inferEntityName(appName) : bp.entityName,
     theme: { mode, accent: bp.accent, density: 'comfortable' },
     layout,
     fields,

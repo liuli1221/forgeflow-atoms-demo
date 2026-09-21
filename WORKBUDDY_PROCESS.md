@@ -1,6 +1,11 @@
 # WORKBUDDY_PROCESS.md
 
 使用 WorkBuddy 完成 ForgeFlow（Atoms-like Demo）的完整过程记录。
+按时间/阶段推进，**只记录实际发生的事**；未执行的内容不写入。
+
+- 日期：2026-09-19
+- 工作目录：`/Users/lilianlliu/Documents/Codex/2026-09-19/w/atomlite-workbuddy`
+- 运行环境：macOS (darwin-arm64) · Node v22.22.2 · git 2.48.1
 
 ---
 
@@ -58,6 +63,7 @@ WorkBuddy 侧的执行策略：先建任务清单（4 个阶段），再按 core
 | S5 | 真实浏览器发现 P0、修复 CSS 级联并增加发布门禁 | ✅ 完成（64 passed / 0 failed） |
 | S6 | 连接 Chrome 完整验收：生成、CRUD、刷新、增量修改、恢复、导出 | ✅ 完成 |
 | S7 | 发布公开 GitHub 仓库与 GitHub Pages，并做公网冒烟验收 | ✅ 完成 |
+| S8 | 根据面试反馈扩展 8 类蓝图 + 自定义 Schema、账号同步服务端、Playwright E2E | ✅ 完成（67 unit + 2 E2E） |
 
 ---
 
@@ -205,7 +211,7 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 8. 代码页可查看 `index.html / styles.css / app.js`；点击导出后出现「项目 JSON 已导出」。
 9. 内置 Console 全程只有 `info`，本次链路未出现 error。
 
-仍未做：真实移动端视口调整、跨浏览器测试，以及 Playwright/Puppeteer 的可重复 CI E2E。
+当时仍未做：真实移动端视口调整、跨浏览器测试，以及可重复 E2E；其中 Chrome Playwright E2E 已在 S8 补齐。
 
 ### 6.4 公开交付验证
 
@@ -215,17 +221,28 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 - 在公网 Demo 中实际打开欢迎页、点击「直接看预置演示」，确认 Builder、预置版本、15 项校验结果和 sandbox 交互应用均能加载。
 - 终端没有可用的 GitHub HTTPS/SSH 凭据，因此发布采用已登录 GitHub 网页上传发布包，再由一次性 Actions 工作流在仓库内解包并提交完整目录。首版工作流错误地在 job 级使用 `hashFiles`，运行失败；改为幂等 shell 检查后第二次运行成功，发布包已从仓库删除，源码目录完整展开。失败过程保留在 Actions 历史中，未伪装成一次成功。
 
+### 6.5 面试反馈后的抢救修复（2026-09-21）
+
+面试官指出三项主要风险：领域仅四类、无登录/服务端存储、无可重复浏览器 E2E。本轮实际修复：
+
+1. 领域蓝图扩展为 task / habit / budget / feedback / inventory / crm / event / library 八类；
+2. 新增 `extractCustomFields()`，未知领域只要显式写“字段包括…”，就会生成 custom AppSpec，支持 6 种字段类型与下拉选项，不再只能套 generic 固定字段；
+3. Node 服务模式新增账号注册/登录、scrypt 密码哈希、HMAC 签名会话、服务端快照和 revision 乐观锁；第二个浏览器可以恢复项目、版本与业务数据；
+4. 引入 `@playwright/test`，新增 2 条真实 Chrome E2E，完整跑通 custom Schema → 生成 → CRUD → 刷新 → 注册上传 → 第二浏览器登录下载；
+5. 单元/服务端测试从 64 增至 67，Playwright 2/2 通过；agent-browser 额外确认首屏非空、无错误浮层、关键入口存在。
+
+边界没有隐藏：GitHub Pages 不执行 Node API，因此当前 Pages 地址仍是浏览器本地模式；账号同步代码已完成并通过 E2E，但公开跨设备同步需要把 Node 服务部署到持久化运行环境。
+
 ---
 
 ## 7. 未完成项 / 明确不在范围内
 
 - 已完成 GitHub 与 Pages 公开交付；本地仓库保留原始 WorkBuddy 提交历史，远端网页发布采用独立提交历史（原因见 6.4）。
-- **没有可重复运行的 Playwright/Puppeteer E2E**；当前浏览器证据来自连接 Chrome 的一次真实交互验收。
 - 没有真实移动端视口与跨浏览器验收；移动端目前是 CSS 断点静态审查。
 - 没有做多语言（界面为简体中文）。
 - 没有做可访问性专项审计（只做了基础 `aria-label` / `role` / 键盘 Esc 关闭）。
 - 没有做 IE / 老浏览器兼容（依赖 ES2020+、`dialog`-free 自绘弹层、CSS 变量）。
-- 生成的应用不支持图表、CSV 导入、关系型数据、多用户。
+- 生成的应用不支持图表、CSV 导入和关系型数据；账号同步当前是单机 JSON 存储，不是生产级多租户数据库。
 - 解析器没有做分词/词向量，纯关键词与句式规则。
 - `src/ui/*` 无单元测试覆盖。
 
@@ -235,10 +252,10 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 
 | 优先级 | 事项 | 价值 |
 |--------|------|------|
-| **P1** | **可重复的真实渲染 E2E**（把 Playwright 作为 devDependency，覆盖桌面/移动端） | 当前只有一次连接 Chrome 的验收；CI 仍缺少能稳定抓 CSS 级联和交互回归的浏览器门禁 |
+| **P1** | 部署账号同步服务并替换为数据库 | 当前 Node 单机 JSON 方案已经可用，但 Pages 不能承载 API，多实例还需要数据库、限流和审计 |
 | P1 | **AppSpec 版本 diff 视图**（v1→v2 字段/主题/布局变化高亮） | 版本多了以后「这次到底改了啥」是最高频问题 |
 | P1 | **生成应用的数据导入/导出（CSV）** | 目前业务数据只能随项目 JSON 走，独立导出更实用 |
-| P1 | **领域扩展到 8~10 类**（阅读清单、面试题库、日程、联系人…） | 直接决定 Demo 的「命中率」体感 |
+| P1 | Playwright 增加移动视口 + Firefox/WebKit | 当前 Chrome 主链已可重复，下一步补兼容性矩阵 |
 | P2 | **解析器可解释面板**：显示命中了哪些关键词、得分多少、为什么落到某领域 | 强化「真实解析」的说服力，也方便调参 |
 | P2 | **计划卡上直接编辑字段**（增删字段、改 label/类型/选项） | 现在只能改名称/视图/主题/模块开关 |
 | P2 | **图表指标**（完成率趋势、分类分布），用原生 SVG 手绘 | 不引依赖也能做 |
@@ -263,3 +280,4 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 - **S5 完成**：真实 Chrome 首次打开预置版本时发现 `#overlay.hidden=true` 但 computed `display=flex`；WorkBuddy 修复 Builder 与生成应用的全局 `[hidden]` 规则，在 validator 增加 `css-hidden` 硬门禁，并新增 9 个回归用例。第二个 WorkBuddy 收尾响应被客户端取消，但 7 个文件的改动已落盘。
 - **S6 完成**：当前会话独立执行 `node --test`（64/64）并连接 Chrome 跑通新建项目、计划审批、生成、预览 CRUD、刷新持久化、增量修改、v1 恢复、代码查看与 JSON 导出；具体证据见 6.3。
 - **S7 完成**：创建公开仓库 `liuli1221/forgeflow-atoms-demo`；在终端 HTTPS/SSH 凭据均不可用时，改用 GitHub 网页上传 + 一次性 Actions 解包，第二次工作流成功；启用 `main/(root)` Pages，`pages-build-deployment` 成功，并在公网地址完成欢迎页和预置演示冒烟验收。
+- **S8 完成**：针对面试反馈，扩展 8 类蓝图与 custom Schema；增加账号/服务端同步及 revision 冲突保护；加入 Playwright devDependency 与 2 条 Chrome E2E。最终实际结果：67/67 unit、2/2 E2E。

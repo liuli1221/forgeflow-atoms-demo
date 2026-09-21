@@ -2,13 +2,19 @@
   "name": "forgeflow",
   "version": "0.1.0",
   "private": true,
-  "description": "ForgeFlow - a local-agent app builder workbench. No API key, no npm deps, no CDN.",
+  "description": "ForgeFlow - a schema-driven local-agent app builder with optional account sync.",
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test"
+    "test": "npm run test:unit",
+    "test:unit": "node --test test/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test:all": "npm run test:unit && npm run test:e2e"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

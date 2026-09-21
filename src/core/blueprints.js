@@ -28,6 +28,26 @@ const CATEGORY_PRESETS = {
     default: ['产品', '服务', '流程', '其他'],
     interview: ['技术面', '项目面', 'HR 面', '模拟面试'],
   },
+  inventory: {
+    default: ['办公用品', '设备', '耗材', '其他'],
+    interview: ['学习设备', '资料', '差旅物品', '其他'],
+  },
+  crm: {
+    default: ['潜在客户', '跟进中', '已成交', '已流失'],
+    interview: ['目标公司', '内推人', '猎头', '其他'],
+  },
+  event: {
+    default: ['会议', '活动', '培训', '其他'],
+    interview: ['笔试', '技术面', 'HR 面', '复盘'],
+  },
+  library: {
+    default: ['技术', '商业', '文学', '其他'],
+    interview: ['算法', '系统设计', '项目管理', '行业研究'],
+  },
+  custom: {
+    default: ['默认', '重要', '归档'],
+    interview: ['准备中', '进行中', '已复盘'],
+  },
   generic: {
     default: ['默认', '重要', '归档'],
     interview: ['准备中', '进行中', '已复盘'],
@@ -133,6 +153,123 @@ export const BLUEPRINTS = {
     doneField: { field: 'status', value: '已完成' },
   },
 
+  inventory: {
+    domain: 'inventory',
+    entityName: '库存项',
+    defaultName: '库存管理器',
+    tagline: '记录库存、位置和补货状态，及时发现短缺。',
+    accent: '#2f7d8c',
+    baseFields: [
+      f('title', '物品名称', 'text', { primary: true, required: true }),
+      f('sku', 'SKU', 'text', { required: true }),
+      f('category', '分类', 'select', { options: [], default: '' }),
+      f('quantity', '库存数量', 'number', { default: 0 }),
+      f('location', '存放位置', 'text'),
+      f('status', '库存状态', 'select', { options: ['充足', '偏低', '缺货'], default: '充足' }),
+    ],
+    optionalFields: {
+      price: f('price', '单价', 'number', { default: 0 }),
+      supplier: f('supplier', '供应商', 'text'),
+      threshold: f('threshold', '补货阈值', 'number', { default: 5 }),
+      notes: f('notes', '备注', 'textarea'),
+      tags: f('tags', '标签', 'text'),
+    },
+    filterFields: ['category', 'status'],
+    doneField: null,
+  },
+
+  crm: {
+    domain: 'crm',
+    entityName: '客户',
+    defaultName: '客户跟进台',
+    tagline: '集中管理客户线索、阶段和下一次跟进。',
+    accent: '#3867b4',
+    baseFields: [
+      f('title', '客户名称', 'text', { primary: true, required: true }),
+      f('company', '公司', 'text'),
+      f('stage', '跟进阶段', 'select', { options: ['新线索', '沟通中', '方案中', '已成交', '已流失'], default: '新线索' }),
+      f('contact', '联系方式', 'text'),
+      f('next_follow_up', '下次跟进日期', 'date'),
+    ],
+    optionalFields: {
+      owner: f('owner', '负责人', 'text'),
+      amount: f('amount', '预计金额', 'number', { default: 0 }),
+      rating: f('rating', '意向评分', 'number', { default: 3 }),
+      notes: f('notes', '跟进记录', 'textarea'),
+      tags: f('tags', '标签', 'text'),
+    },
+    filterFields: ['stage'],
+    doneField: { field: 'stage', value: '已成交' },
+  },
+
+  event: {
+    domain: 'event',
+    entityName: '日程',
+    defaultName: '活动日程管理器',
+    tagline: '安排时间、地点和参与状态，避免遗漏关键日程。',
+    accent: '#8b5a2b',
+    baseFields: [
+      f('title', '活动名称', 'text', { primary: true, required: true }),
+      f('category', '类型', 'select', { options: [], default: '' }),
+      f('date', '日期', 'date'),
+      f('location', '地点', 'text'),
+      f('status', '状态', 'select', { options: ['待确认', '已确认', '已完成', '已取消'], default: '待确认' }),
+    ],
+    optionalFields: {
+      owner: f('owner', '负责人', 'text'),
+      capacity: f('capacity', '人数上限', 'number', { default: 20 }),
+      notes: f('notes', '说明', 'textarea'),
+      tags: f('tags', '标签', 'text'),
+    },
+    filterFields: ['category', 'status'],
+    doneField: { field: 'status', value: '已完成' },
+  },
+
+  library: {
+    domain: 'library',
+    entityName: '图书',
+    defaultName: '图书管理器',
+    tagline: '管理书目、借阅状态和阅读评价。',
+    accent: '#7653a6',
+    baseFields: [
+      f('title', '书名', 'text', { primary: true, required: true }),
+      f('author', '作者', 'text'),
+      f('category', '分类', 'select', { options: [], default: '' }),
+      f('status', '借阅状态', 'select', { options: ['在库', '已借出', '预约中'], default: '在库' }),
+    ],
+    optionalFields: {
+      isbn: f('isbn', 'ISBN', 'text'),
+      rating: f('rating', '评分', 'number', { default: 3 }),
+      due: f('due', '归还日期', 'date'),
+      notes: f('notes', '读书笔记', 'textarea'),
+      tags: f('tags', '标签', 'text'),
+    },
+    filterFields: ['category', 'status'],
+    doneField: null,
+  },
+
+  custom: {
+    domain: 'custom',
+    entityName: '记录',
+    defaultName: '自定义数据应用',
+    tagline: '按你的字段定义生成可搜索、筛选和统计的数据应用。',
+    accent: '#356d74',
+    baseFields: [
+      f('title', '名称', 'text', { primary: true, required: true }),
+    ],
+    optionalFields: {
+      notes: f('notes', '备注', 'textarea'),
+      category: f('category', '分类', 'select', { options: ['默认', '重要', '归档'], default: '默认' }),
+      priority: f('priority', '优先级', 'select', { options: ['高', '中', '低'], default: '中' }),
+      due: f('due', '日期', 'date'),
+      amount: f('amount', '数量', 'number', { default: 0 }),
+      rating: f('rating', '评分', 'number', { default: 3 }),
+      tags: f('tags', '标签', 'text'),
+    },
+    filterFields: [],
+    doneField: null,
+  },
+
   generic: {
     domain: 'generic',
     entityName: '条目',
@@ -201,7 +338,36 @@ export function buildMetrics(domain, fields) {
     return out;
   }
 
-  // task / generic
+  if (domain === 'inventory') {
+    if (has('quantity')) out.push({ key: 'stock_total', label: '库存合计', type: 'sum', field: 'quantity', format: 'number' });
+    if (has('status')) out.push({ key: 'low_stock', label: '缺货项', type: 'count', where: { field: 'status', value: '缺货' }, format: 'number' });
+    return out;
+  }
+
+  if (domain === 'library') {
+    if (has('status')) out.push({ key: 'borrowed', label: '已借出', type: 'count', where: { field: 'status', value: '已借出' }, format: 'number' });
+    if (has('rating')) out.push({ key: 'avg_rating', label: '平均评分', type: 'avg', field: 'rating', format: 'number' });
+    return out;
+  }
+
+  if (domain === 'custom') {
+    const numeric = fields.filter((x) => x.type === 'number').slice(0, 2);
+    for (const field of numeric) {
+      const avg = /评分|分数|比例|率/.test(field.label);
+      out.push({
+        key: `${avg ? 'avg' : 'sum'}_${field.key}`.slice(0, 32),
+        label: `${field.label}${avg ? '平均值' : '合计'}`,
+        type: avg ? 'avg' : 'sum',
+        field: field.key,
+        format: /金额|价格|费用/.test(field.label) ? 'currency' : 'number',
+      });
+    }
+    const checkbox = fields.find((x) => x.type === 'checkbox');
+    if (checkbox) out.push({ key: 'checked_rate', label: `${checkbox.label}占比`, type: 'percent', where: { field: checkbox.key, value: true }, format: 'percent' });
+    return out;
+  }
+
+  // task / crm / event / generic
   const bp = getBlueprint(domain);
   const done = bp.doneField;
   if (done && has(done.field)) {
@@ -218,6 +384,21 @@ export function buildMetrics(domain, fields) {
 export function buildSeedItems(domain, fields, flavor = 'default') {
   const pick = (k) => fields.find((x) => x.key === k);
   const cats = (pick('category') && pick('category').options) || categoryOptions(domain, flavor);
+
+  if (domain === 'custom') {
+    return ['A', 'B'].map((suffix, rowIndex) => {
+      const item = {};
+      fields.forEach((field, fieldIndex) => {
+        if (fieldIndex === 0) item[field.key] = `示例${field.label} ${suffix}`;
+        else if (field.type === 'select') item[field.key] = field.options[rowIndex % field.options.length];
+        else if (field.type === 'checkbox') item[field.key] = rowIndex === 0;
+        else if (field.type === 'number') item[field.key] = rowIndex + 1;
+        else if (field.type === 'date') item[field.key] = `2026-09-${22 + rowIndex}`;
+        else item[field.key] = '';
+      });
+      return item;
+    });
+  }
 
   const SEEDS = {
     task: [
@@ -240,6 +421,30 @@ export function buildSeedItems(domain, fields, flavor = 'default') {
       { title: '算法题思路正确但耗时偏长', source: '面试官', category: cats[0], sentiment: '负面', status: '处理中', rating: 3 },
       { title: '项目讲述结构清晰', source: '面试官', category: cats[1] || cats[0], sentiment: '正面', status: '已完成', rating: 5 },
       { title: '薪资沟通准备不足', source: '自评', category: cats[2] || cats[0], sentiment: '中性', status: '待处理', rating: 2 },
+    ],
+    inventory: [
+      { title: '无线键盘', sku: 'KB-001', category: cats[1] || cats[0], quantity: 18, location: 'A-02', status: '充足' },
+      { title: '打印纸', sku: 'PP-008', category: cats[2] || cats[0], quantity: 3, location: 'B-11', status: '偏低' },
+      { title: '扩展坞', sku: 'DK-014', category: cats[1] || cats[0], quantity: 0, location: 'A-05', status: '缺货' },
+    ],
+    crm: [
+      { title: '远景科技', company: '远景科技', stage: '沟通中', contact: 'contact@example.com', next_follow_up: '2026-09-24' },
+      { title: '星海工作室', company: '星海工作室', stage: '方案中', contact: '13800000000', next_follow_up: '2026-09-25' },
+      { title: '青禾教育', company: '青禾教育', stage: '已成交', contact: 'hello@example.com', next_follow_up: '2026-10-02' },
+    ],
+    event: [
+      { title: '产品需求评审', category: cats[0], date: '2026-09-22', location: '3A 会议室', status: '已确认' },
+      { title: '技术分享会', category: cats[2] || cats[0], date: '2026-09-25', location: '线上', status: '待确认' },
+      { title: '季度复盘', category: cats[0], date: '2026-09-30', location: '多功能厅', status: '已完成' },
+    ],
+    library: [
+      { title: '设计数据密集型应用', author: 'Martin Kleppmann', category: cats[0], status: '已借出', rating: 5 },
+      { title: '人月神话', author: 'Fred Brooks', category: cats[0], status: '在库', rating: 4 },
+      { title: '系统设计面试', author: 'Alex Xu', category: cats[1] || cats[0], status: '预约中', rating: 5 },
+    ],
+    custom: [
+      { title: '示例记录 A' },
+      { title: '示例记录 B' },
     ],
     generic: [
       { title: '示例条目 A', category: cats[0], status: '待办' },

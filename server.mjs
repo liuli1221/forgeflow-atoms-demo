@@ -11,10 +11,15 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSyncStore } from './server/sync-store.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '127.0.0.1';
+const DATA_FILE = process.env.FORGEFLOW_DATA_FILE || join(ROOT, '.data', 'sync.json');
+const SESSION_SECRET = process.env.FORGEFLOW_SESSION_SECRET || 'forgeflow-local-dev-secret';
+const syncStore = createSyncStore({ filePath: DATA_FILE, secret: SESSION_SECRET });
+const MAX_BODY = 5 * 1024 * 1024;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -56,7 +61,79 @@ async function resolveFile(abs) {
   }
 }
 
+function sendJson(res, status, payload) {
+  const body = Buffer.from(JSON.stringify(payload));
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': body.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  });
+  res.end(body);
+}
+
+async function readJson(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) throw Object.assign(new Error('请求体超过 5MB。'), { status: 413 });
+    chunks.push(chunk);
+  }
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw Object.assign(new Error('请求体不是合法 JSON。'), { status: 400 });
+  }
+}
+
+function bearer(req) {
+  const value = String(req.headers.authorization || '');
+  return value.startsWith('Bearer ') ? value.slice(7) : '';
+}
+
+async function handleApi(req, res, urlPath) {
+  try {
+    if (urlPath === '/api/health' && req.method === 'GET') {
+      sendJson(res, 200, { ok: true, service: 'forgeflow-sync', storage: 'server' });
+      return;
+    }
+    if (urlPath === '/api/auth/register' && req.method === 'POST') {
+      const body = await readJson(req);
+      const result = await syncStore.register(body.username, body.password);
+      sendJson(res, result.status, result);
+      return;
+    }
+    if (urlPath === '/api/auth/login' && req.method === 'POST') {
+      const body = await readJson(req);
+      const result = await syncStore.login(body.username, body.password);
+      sendJson(res, result.status, result);
+      return;
+    }
+    if (urlPath === '/api/sync' && req.method === 'GET') {
+      const result = await syncStore.read(bearer(req));
+      sendJson(res, result.status, result);
+      return;
+    }
+    if (urlPath === '/api/sync' && req.method === 'PUT') {
+      const body = await readJson(req);
+      const result = await syncStore.write(bearer(req), body.baseRevision, body.snapshot);
+      sendJson(res, result.status, result);
+      return;
+    }
+    sendJson(res, 404, { ok: false, error: 'API 不存在。' });
+  } catch (err) {
+    sendJson(res, Number(err && err.status) || 500, { ok: false, error: String(err && err.message || err) });
+  }
+}
+
 const server = createServer(async (req, res) => {
+  const urlPath = (req.url || '/').split('?')[0];
+  if (urlPath.startsWith('/api/')) {
+    await handleApi(req, res, urlPath);
+    return;
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', allow: 'GET, HEAD' });
     res.end('405 Method Not Allowed');

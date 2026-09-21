@@ -18,13 +18,14 @@
 └───────────────────────────────────────────┬──────────────────────────────────────────────────┘
                                             │ 只调用纯函数，不反向依赖
 ┌───────────────────────────────────────────▼──────────── src/core（纯逻辑层，DOM-free）───────┐
-│ parser.js  mutator.js  blueprints.js  spec-schema.js                                         │
+│ parser.js  mutator.js  blueprints.js  spec-schema.js  sync-client.js                         │
 │ planner.js  agent.js（状态机）  generator/*  validator.js  versions.js  storage.js  seed.js   │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 依赖方向是单向的：`ui → core`。core 内部也保持单向：
-`blueprints → parser/mutator → planner → agent → generator → validator → versions → storage`。
+`blueprints → parser/mutator → planner → agent → generator → validator → versions → storage`；
+Node 服务模式额外提供 `sync-client → /api/auth + /api/sync → sync-store`。
 
 ## 3. 核心数据结构：AppSpec
 
@@ -66,7 +67,7 @@ AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用�
 
 不是「换个标题」，而是四步真实分析：
 
-1. **领域打分**：`DOMAIN_KEYWORDS` 四张关键词表逐个统计命中，按 `max(2, 关键词长度)` 加权求和，取最高分；
+1. **领域打分**：`DOMAIN_KEYWORDS` 八张关键词表逐个统计命中，按 `max(2, 关键词长度)` 加权求和，取最高分；
    全部为 0 时落 `generic` 并置 `analysis.fallback = true`。
 2. **否定识别**：`negatedAt()` 回看关键词前 6 个字符，命中 `不需要/不要/无需/去掉/移除/取消/关闭/without` 时，
    该命中记入 `negated` 而不是 `hits`。因此「不需要统计」会关闭统计模块而不是打开它。
@@ -78,6 +79,10 @@ AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用�
 领域蓝图 `blueprints.js` 提供 `baseFields`（必备）、`optionalFields`（按需）、`filterFields`、
 `doneField`（完成语义），以及 `buildMetrics()` / `buildSeedItems()`——
 指标只会引用**实际存在**的字段，所以「去掉优先级」之后不会残留悬空指标。
+
+除八类蓝图外，`extractCustomFields()` 能解析“字段包括…”后的显式 Schema，识别 text / textarea /
+select / number / date / checkbox，并从括号中提取下拉选项。未知领域只要给出至少两个字段就进入
+`custom`，不会套用 generic 的固定字段；只有既未命中领域、又没有显式 Schema 时才兜底 generic。
 
 ## 5. 增量修改（mutator.js）
 
@@ -169,6 +174,24 @@ script 标签数量、CSS 主题变量、CSS 断点（warn）、`[hidden]` 强�
 - `loadState()` 对损坏 JSON 返回空状态而不是抛异常；`activeProjectId` 指向已删项目时自动修正。
 - 导出格式 `{kind:'forgeflow.project', version:1, project, appData}`，
   `parseImport()` 逐项校验 kind/version/project 并给出中文原因；id 冲突时 `dedupeProjectId()` 重新分配。
+
+### 10.1 可选账号与服务端同步
+
+Node 服务模式提供同源 API：
+
+```text
+POST /api/auth/register  ─┐
+POST /api/auth/login     ─┴─▶ scrypt 密码哈希 + HMAC 签名 token
+GET  /api/sync          ────▶ 读取账号快照
+PUT  /api/sync          ────▶ baseRevision 乐观锁 → 原子写 JSON 文件
+```
+
+- 浏览器只在 `sessionStorage` 保存短期会话，密码不会持久化；
+- 上传必须携带当前 `baseRevision`，云端已更新时返回 409，避免静默覆盖；
+- 服务端先写临时文件再 rename，减少半写入文件；
+- 下载覆盖前把本地完整快照保存为 `forgeflow.v1.pre_sync_backup`；
+- GitHub Pages 无服务端能力时，健康检查失败并明确显示“本地数据”，不伪装云同步；
+- 当前 JSON 存储是 Demo 单机实现，多实例部署需换数据库并增加限流、找回密码与安全审计。
 
 ## 11. UI 与响应式
 

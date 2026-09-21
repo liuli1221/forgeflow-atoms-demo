@@ -8,7 +8,11 @@
 
 export const SPEC_VERSION = 1;
 
-export const DOMAINS = ['task', 'habit', 'budget', 'feedback', 'generic'];
+export const DOMAINS = [
+  'task', 'habit', 'budget', 'feedback',
+  'inventory', 'crm', 'event', 'library',
+  'custom', 'generic',
+];
 export const FIELD_TYPES = ['text', 'textarea', 'select', 'number', 'date', 'checkbox'];
 export const VIEW_MODES = ['cards', 'table', 'list'];
 export const THEME_MODES = ['light', 'dark'];

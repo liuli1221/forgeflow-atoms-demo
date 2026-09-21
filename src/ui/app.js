@@ -9,6 +9,7 @@ import { $, copyText, downloadText, readFileAsText } from './dom.js';
 import { initToast, toast } from './toast.js';
 import { createAppStore } from './store.js';
 import { createPreviewBridge } from './preview-bridge.js';
+import { createSyncClient } from './sync-client.js';
 import { renderProjects, renderChat, renderSuggestions } from './sidebar.js';
 import { renderPlan, renderTrace } from './plan-view.js';
 import { renderFileTabs, renderCode, renderConsole, renderVersions } from './viewer.js';
@@ -19,6 +20,8 @@ import { buildExportPayload, parseImport, dedupeProjectId, collectAppIds } from 
 import { uid, nowIso } from '../core/util.js';
 
 const store = createAppStore();
+const syncClient = createSyncClient();
+const SYNC_BACKUP_KEY = 'forgeflow.v1.pre_sync_backup';
 
 const ui = {};
 const logs = [];
@@ -28,6 +31,8 @@ let cancelRequested = false;
 let previewVersionId = null;
 let loadedPreviewKey = '';
 let bridge = null;
+let syncAvailable = false;
+let syncBusy = false;
 
 /* ------------------------------------------------------------- logging */
 function log(level, message) {
@@ -389,6 +394,111 @@ async function importProjectFile(file) {
   }
 }
 
+/* --------------------------------------------------------- account sync */
+function buildSyncSnapshot() {
+  const state = JSON.parse(JSON.stringify(store.getState()));
+  const appIds = [...new Set(state.projects.flatMap((p) => collectAppIds(p)))];
+  return {
+    schemaVersion: 1,
+    savedAt: nowIso(),
+    state,
+    appData: store.storage.collectAppData(appIds),
+  };
+}
+
+function renderSyncState(message = '') {
+  const session = syncClient.session();
+  ui.syncAuth.hidden = !!session || !syncAvailable;
+  ui.syncSession.hidden = !session;
+  ui.syncUser.textContent = session ? session.username : '';
+  ui.syncRevision.textContent = session ? String(session.revision || 0) : '0';
+  ui.syncStatus.textContent = message || (syncAvailable
+    ? session ? '已连接服务端，可以在不同设备登录同一账号同步。' : '服务端同步可用，请登录或注册。'
+    : '当前是静态部署：项目仍保存在本机。使用 Node 服务端模式可启用账号同步。');
+  ui.syncError.hidden = true;
+  for (const button of [ui.btnSyncLogin, ui.btnSyncRegister, ui.btnSyncPush, ui.btnSyncPull, ui.btnSyncLogout]) {
+    button.disabled = syncBusy;
+  }
+}
+
+function syncError(error) {
+  ui.syncError.textContent = String(error && error.message || error);
+  ui.syncError.hidden = false;
+  log('error', `同步失败：${ui.syncError.textContent}`);
+}
+
+async function withSyncBusy(action) {
+  if (syncBusy) return;
+  syncBusy = true;
+  renderSyncState('正在处理…');
+  try {
+    await action();
+  } catch (error) {
+    syncError(error);
+  } finally {
+    syncBusy = false;
+    const session = syncClient.session();
+    ui.syncAuth.hidden = !!session || !syncAvailable;
+    ui.syncSession.hidden = !session;
+    ui.syncUser.textContent = session ? session.username : '';
+    ui.syncRevision.textContent = session ? String(session.revision || 0) : '0';
+    for (const button of [ui.btnSyncLogin, ui.btnSyncRegister, ui.btnSyncPush, ui.btnSyncPull, ui.btnSyncLogout]) button.disabled = false;
+  }
+}
+
+async function checkSyncHealth() {
+  const health = await syncClient.health();
+  syncAvailable = !!health.ok;
+  ui.btnCloud.textContent = syncAvailable ? '账号同步' : '本地数据';
+  renderSyncState();
+}
+
+function credentials() {
+  return { username: ui.syncUsername.value.trim(), password: ui.syncPassword.value };
+}
+
+async function authenticate(mode) {
+  await withSyncBusy(async () => {
+    const { username, password } = credentials();
+    if (!username || password.length < 8) throw new Error('请输入有效用户名和至少 8 位密码。');
+    if (mode === 'register') await syncClient.register(username, password);
+    else await syncClient.login(username, password);
+    ui.syncPassword.value = '';
+    renderSyncState(mode === 'register' ? '注册成功，已登录。' : '登录成功。');
+    toast(mode === 'register' ? '账号创建成功' : '登录成功', 'ok');
+  });
+}
+
+async function pushCloud() {
+  await withSyncBusy(async () => {
+    await syncClient.push(buildSyncSnapshot());
+    renderSyncState('当前浏览器数据已上传。');
+    toast('云端同步完成', 'ok');
+    log('info', '云端同步：上传成功');
+  });
+}
+
+async function pullCloud() {
+  await withSyncBusy(async () => {
+    const result = await syncClient.pull();
+    if (!result.snapshot) throw new Error('云端还没有数据，请先在一台设备上传。');
+    const snapshot = result.snapshot;
+    if (!snapshot.state || !Array.isArray(snapshot.state.projects)) throw new Error('云端数据格式不正确。');
+    try { window.localStorage.setItem(SYNC_BACKUP_KEY, JSON.stringify(buildSyncSnapshot())); } catch { /* best effort */ }
+    store.update((state) => {
+      for (const key of Object.keys(state)) delete state[key];
+      Object.assign(state, JSON.parse(JSON.stringify(snapshot.state)));
+    }, { immediate: true });
+    for (const [appId, data] of Object.entries(snapshot.appData || {})) store.storage.setAppData(appId, data);
+    previewVersionId = null;
+    loadedPreviewKey = '';
+    render();
+    renderSyncState('云端数据已下载；覆盖前的本地快照已自动备份。');
+    toast('云端数据已恢复', 'ok');
+    log('info', '云端同步：下载并恢复成功');
+  });
+}
+
 /* ------------------------------------------------------------ tabs/nav */
 function switchTab(name) {
   activeTab = name;
@@ -433,9 +543,37 @@ function cacheDom() {
   ui.previewEmpty = $('#preview-empty');
   ui.previewLabel = $('#preview-label');
   ui.importFile = $('#import-file');
+  ui.btnCloud = $('#btn-cloud');
+  ui.syncDialog = $('#sync-dialog');
+  ui.syncStatus = $('#sync-status');
+  ui.syncAuth = $('#sync-auth');
+  ui.syncSession = $('#sync-session');
+  ui.syncUsername = $('#sync-username');
+  ui.syncPassword = $('#sync-password');
+  ui.syncUser = $('#sync-user');
+  ui.syncRevision = $('#sync-revision');
+  ui.syncError = $('#sync-error');
+  ui.btnSyncLogin = $('#btn-sync-login');
+  ui.btnSyncRegister = $('#btn-sync-register');
+  ui.btnSyncPush = $('#btn-sync-push');
+  ui.btnSyncPull = $('#btn-sync-pull');
+  ui.btnSyncLogout = $('#btn-sync-logout');
 }
 
 function bindEvents() {
+  ui.btnCloud.addEventListener('click', () => {
+    renderSyncState();
+    ui.syncDialog.showModal();
+  });
+  ui.btnSyncLogin.addEventListener('click', () => authenticate('login'));
+  ui.btnSyncRegister.addEventListener('click', () => authenticate('register'));
+  ui.btnSyncPush.addEventListener('click', pushCloud);
+  ui.btnSyncPull.addEventListener('click', pullCloud);
+  ui.btnSyncLogout.addEventListener('click', () => {
+    syncClient.logout();
+    renderSyncState('已退出账号，本机数据不受影响。');
+    toast('已退出同步账号', 'info');
+  });
   $('#welcome-create').addEventListener('click', () => {
     store.update((s) => { s.welcomeSeen = true; }, { immediate: true });
     const p = newProject('新项目 1');
@@ -564,6 +702,7 @@ function init() {
     onLog: log,
   });
   bindEvents();
+  checkSyncHealth();
   seedIfEmpty();
 
   if (!store.persistent) {

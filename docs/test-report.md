@@ -1,38 +1,43 @@
 # 测试报告
 
 - 项目：ForgeFlow（`w/atomlite-workbuddy`）
-- 日期：2026-09-19
-- 环境：macOS (darwin-arm64) · Node v22.22.2
-- 命令：`node --test`（等价于 `npm test`）
+- 更新日期：2026-09-21
+- 环境：macOS (darwin-arm64) · Node v26.0.0 · Chrome
+- 命令：`npm run test:unit` / `npm run test:e2e`
 
-> **口径说明**：本报告只记录**实际执行过**的验证。Node 回归可重复执行；浏览器部分是连接 Chrome 完成的一次真实交互验收，不等同于可在 CI 重跑的 Playwright E2E。
+> **口径说明**：本报告只记录**实际执行过**的验证。Node 回归与 Playwright Chrome E2E 均可重复运行；跨浏览器与真实移动设备仍未覆盖。
 
 ---
 
 ## 1. 汇总
 
 ```
-$ node --test
-# tests 64
+$ npm run test:unit
+# tests 67
 # suites 0
-# pass 64
+# pass 67
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms ≈ 488
+# duration_ms ≈ 170
+
+$ npm run test:e2e
+2 passed
 ```
 
 | 测试文件 | 用例 | 结果 | 覆盖对象 |
 |----------|------|------|----------|
-| `test/parser.test.mjs` | 11 | ✅ | `core/parser.js`（自然语言 → AppSpec） |
+| `test/parser.test.mjs` | 13 | ✅ | `core/parser.js`（8 类蓝图 + 显式 Schema → AppSpec） |
 | `test/mutator.test.mjs` | 10 | ✅ | `core/mutator.js`（增量修改） |
 | `test/generator.test.mjs` | 9 | ✅ | `core/generator/*` + `core/validator.js` |
 | `test/versions.test.mjs` | 6 | ✅ | `core/versions.js`（版本/恢复） |
 | `test/storage.test.mjs` | 8 | ✅ | `core/storage.js`（持久化/导入导出） |
 | `test/agent.test.mjs` | 11 | ✅ | `core/agent.js`（状态机/六阶段/取消） |
 | `test/hidden-visibility.test.mjs` | 9 | ✅ | **hidden 显隐回归（本次 P0 bugfix）** |
-| 合计 | **64** | **64 pass / 0 fail** | |
+| `test/sync-store.test.mjs` | 1 | ✅ | 注册/登录/密码哈希/快照/revision 冲突 |
+| 单元与服务端合计 | **67** | **67 pass / 0 fail** | |
+| `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome：生成/CRUD/刷新/跨浏览器账号同步/页面错误 |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -40,19 +45,21 @@ $ node --test
 
 ## 2. 用例清单
 
-### 2.1 `parser.test.mjs`（11）
+### 2.1 `parser.test.mjs`（13）
 
 1. 面试任务管理器 → task 领域，含优先级/分类筛选/统计
 2. 习惯打卡 → habit 领域，识别连续天数
 3. 记账 → budget 领域，含金额与结余指标
 4. 反馈收集 → feedback 领域，识别评分字段
-5. 未命中领域 → generic 兜底且标记 fallback
-6. 否定句式：不需要统计 → `showStats=false`
-7. 暗色主题与表格视图可以从描述中识别
-8. 非法输入降级：非字符串 / 过短 / 空白
-9. 超长输入被截断但不崩溃
-10. 应用名抽取会去掉引导动词与尾部噪声
-11. `detectDomain` 在多领域词共存时取分数最高者
+5. inventory / crm / event / library 四类新增蓝图可生成合法 AppSpec
+6. 未知领域的“字段包括…”被解析为 custom Schema，而非 generic 固定字段
+7. 未命中领域且无显式字段 → generic 兜底并标记 fallback
+8. 否定句式：不需要统计 → `showStats=false`
+9. 暗色主题与表格视图可以从描述中识别
+10. 非法输入降级：非字符串 / 过短 / 空白
+11. 超长输入被截断但不崩溃
+12. 应用名抽取会去掉引导动词与尾部噪声
+13. `detectDomain` 在多领域词共存时取分数最高者
 
 ### 2.2 `mutator.test.mjs`（10）
 
@@ -100,8 +107,16 @@ $ node --test
 5. JS 运行时切换的元素（overlay / toast / empty / form-error）同样可隐藏
 6. `validateBundle` 会拦住丢掉 `[hidden]` 兜底的 CSS
 7. Builder `base.css` 带 `[hidden]` 全局兜底
-8. `index.html` 里所有 hidden 元素都真的不可见（`#welcome` / `#workbench` / `#import-file`）
+8. `index.html` 里所有 hidden 元素都真的不可见（含同步面板状态）
 9. Builder 运行时切换的 `.preview-empty` 仍可隐藏（全局兜底替代了逐个补丁）
+
+### 2.8 `sync-store.test.mjs`（1）
+
+覆盖注册、重复用户名冲突、错误密码、scrypt 密码哈希、登录、快照写入/读取、revision 409 冲突与磁盘持久化。
+
+### 2.9 `e2e/forgeflow.spec.js`（2）
+
+真实 Chrome 覆盖 custom Schema 生成、计划审批、预览 CRUD、整页刷新恢复、账号注册上传、第二浏览器登录下载恢复，以及首屏 `pageerror` 冒烟检查。
 
 ---
 
@@ -160,14 +175,14 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 
 ### 3.5 回归验证方式
 
-由于没有浏览器自动化，测试里实现了一个**最小 CSS 级联求解器**（`!important` > 特异性 > 源码顺序，
+首轮修复时尚未建立浏览器自动化，因此测试里实现了一个**最小 CSS 级联求解器**（`!important` > 特异性 > 源码顺序，
 把 UA 的 `[hidden]` 规则也纳入参与竞争），对每个 hidden 元素求解 `display`：
 
 - 先用元测试证明求解器能在「修复前」的 CSS 上算出 `flex`（即这套检查确实抓得住这个 bug）；
 - 再断言修复后的 Builder CSS 与生成 CSS 上，所有 hidden 元素都算出 `none`；
 - 另外断言 `validateBundle` 在兜底规则被删除时会 fail。
 
-这不是真实渲染，但它检查的正是本次出错的那一层（级联优先级），比「grep 一下有没有这行」强。
+这项静态门禁继续保留，同时新增的 Playwright E2E 提供真实渲染与完整交互回归。
 
 ---
 
@@ -181,13 +196,21 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 - 恢复 v1；Console 显示 `版本恢复：v1` 和 `app ready with 5 items`，预览回到卡片视图。
 - 检查源码三文件入口；执行项目 JSON 导出；内置 Console 未出现 error。
 
-### 4.2 未覆盖
+### 4.2 已执行：可重复 Playwright Chrome E2E
 
-- **没有可重复运行的 Playwright/Puppeteer E2E。** WorkBuddy 曾尝试下载可选 Playwright 浏览器，但被取消；没有把该尝试计入测试结果。
+`npm run test:e2e` 实际完成 2/2：
+
+1. 新建未知领域“宠物档案”并从五个显式字段生成 custom AppSpec；批准后生成 v1；
+2. 在 sandbox 预览中新增“团子”，整页刷新后项目与业务数据仍在；
+3. 注册账号并上传；创建第二个独立浏览器上下文，登录同一账号并下载；项目、版本及“团子”均恢复；
+4. 独立冒烟用例检查页面标题、首屏关键按钮和 `pageerror`；
+5. Playwright 启动真实本机 Chrome，失败保留 trace 与截图。
+
+### 4.3 未覆盖
+
 - 没有真实移动端视口验证；移动端只有 CSS 断点静态审查。
 - 没有跨浏览器兼容性验证。
-- `src/ui/*`（DOM 控制器）没有单元测试覆盖，只靠 `core` 层测试 + 静态审查。
-- postMessage 持久化桥已经过上述刷新场景验证，但尚无自动化 E2E 回归。
+- `src/ui/*` 没有细粒度单元测试；核心 UI 主链由 E2E 覆盖。
 - 无可访问性专项审计、无跨浏览器兼容性测试。
 
 ## 5. 已执行的非单测验证
@@ -212,4 +235,4 @@ $ curl -s http://127.0.0.1:4173/src/styles/base.css | grep hidden
 - `pages-build-deployment` 成功完成；公开 URL 返回 ForgeFlow 页面而非 404。
 - 在公开 URL 上点击「直接看预置演示」，预置项目、15 项校验结果、预览 iframe 与示例数据均成功加载。
 
-公网验证是一次真实 Chrome 冒烟测试；它不替代尚未建立的 Playwright/Puppeteer CI E2E。
+公网 Pages 仍是静态本地模式；账号同步 E2E 针对 Node 服务模式。Playwright 配置现已进入仓库，可在具备 Chrome 的 CI 环境重复运行。

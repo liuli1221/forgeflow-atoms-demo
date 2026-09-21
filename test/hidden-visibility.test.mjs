@@ -233,10 +233,10 @@ test('Builder base.css 带 [hidden] 全局兜底', () => {
   assert.match(read('src/styles/base.css'), /\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important/);
 });
 
-test('index.html 里所有 hidden 元素都真的不可见（#welcome / #workbench）', () => {
+test('index.html 里所有 hidden 元素都真的不可见（含同步面板状态）', () => {
   const els = hiddenElementsOf(read('index.html'));
   const ids = els.map((e) => e.id).sort();
-  assert.deepEqual(ids, ['import-file', 'welcome', 'workbench']);
+  assert.deepEqual(ids, ['import-file', 'sync-error', 'sync-session', 'welcome', 'workbench']);
 
   for (const el of els) {
     const display = computedDisplayWhenHidden(BUILDER_CSS, el);

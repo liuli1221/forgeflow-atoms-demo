@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePrompt, extractAppName, detectDomain } from '../src/core/parser.js';
+import { parsePrompt, extractAppName, detectDomain, extractCustomFields } from '../src/core/parser.js';
 import { validateSpec } from '../src/core/spec-schema.js';
 
 const fixed = { appId: 'app_test', now: '2026-09-19T00:00:00.000Z' };
@@ -49,6 +49,35 @@ test('反馈收集 → feedback 领域，识别评分字段', () => {
   assert.equal(spec.domain, 'feedback');
   assert.ok(spec.fields.some((f) => f.key === 'rating'));
   assert.ok(spec.metrics.some((m) => m.key === 'avg_rating'));
+  assert.equal(validateSpec(spec).ok, true);
+});
+
+test('新增领域蓝图：库存 / CRM / 活动 / 图书', () => {
+  const cases = [
+    ['做一个库存管理系统，支持补货阈值', 'inventory', 'quantity'],
+    ['做一个客户跟进 CRM，记录负责人和预计金额', 'crm', 'stage'],
+    ['做一个活动管理系统，记录地点和人数上限', 'event', 'location'],
+    ['做一个图书管理系统，记录 ISBN 和评分', 'library', 'author'],
+  ];
+  for (const [prompt, domain, requiredKey] of cases) {
+    const { spec } = parsePrompt(prompt, fixed);
+    assert.equal(spec.domain, domain);
+    assert.ok(spec.fields.some((field) => field.key === requiredKey));
+    assert.equal(validateSpec(spec).ok, true);
+  }
+});
+
+test('未知领域可从显式字段生成 custom AppSpec，而不是 generic 固定 CRUD', () => {
+  const prompt = '做一个宠物档案，字段包括宠物名、品种(猫,狗,其他)、出生日期、是否绝育、体重，支持搜索和统计';
+  const fields = extractCustomFields(prompt);
+  assert.deepEqual(fields.map((field) => field.type), ['text', 'select', 'date', 'checkbox', 'number']);
+  const { spec, analysis } = parsePrompt(prompt, fixed);
+  assert.equal(spec.domain, 'custom');
+  assert.equal(analysis.fallback, false);
+  assert.equal(spec.fields.length, 5);
+  assert.equal(spec.fields[1].options.length, 3);
+  assert.ok(spec.metrics.some((metric) => metric.type === 'sum'));
+  assert.ok(spec.metrics.some((metric) => metric.type === 'percent'));
   assert.equal(validateSpec(spec).ok, true);
 });
 

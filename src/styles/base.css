@@ -137,6 +137,26 @@ textarea { resize: vertical; }
 }
 .welcome-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ---------------------------------------------------------- cloud sync */
+.sync-dialog {
+  width: min(520px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid var(--ff-border);
+  border-radius: 16px;
+  color: var(--ff-text);
+  background: var(--ff-panel);
+  box-shadow: 0 24px 80px rgba(24, 35, 68, .25);
+}
+.sync-dialog::backdrop { background: rgba(15, 21, 36, .46); }
+.sync-card { padding: 20px; display: grid; gap: 16px; }
+.sync-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.sync-head h2 { font-size: 18px; }
+.sync-auth, .sync-session { display: grid; gap: 12px; }
+.sync-auth label { display: grid; gap: 4px; color: var(--ff-muted); font-size: 12px; }
+.sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sync-session > p { font-size: 13px; }
+.sync-error { color: var(--ff-danger); background: rgba(214,69,69,.08); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+
 /* --------------------------------------------------------------- toast */
 .toast-host {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
