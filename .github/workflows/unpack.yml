@@ -13,12 +13,12 @@ jobs:
       - name: Unpack release
         id: unpack
         run: |
-          if [ ! -f forgeflow-release.zip ]; then
+          if [ ! -f forgeflow-vercel-release.zip ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          unzip -o forgeflow-release.zip
-          rm forgeflow-release.zip
+          unzip -o forgeflow-vercel-release.zip
+          rm forgeflow-vercel-release.zip
       - name: Commit extracted project
         if: steps.unpack.outputs.skip != 'true'
         run: |
