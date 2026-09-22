@@ -8,17 +8,23 @@
  *   PORT=8080 node server.mjs -> http://127.0.0.1:8080
  */
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSyncStore } from './server/sync-store.mjs';
+import { loadEnvFile } from './server/env.mjs';
+import { generateWithDeepSeek } from './server/deepseek-generator.mjs';
+import { generationGuardFromEnv } from './server/generation-guard.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
+await loadEnvFile(join(ROOT, '.env.local'));
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '127.0.0.1';
 const DATA_FILE = process.env.FORGEFLOW_DATA_FILE || join(ROOT, '.data', 'sync.json');
 const SESSION_SECRET = process.env.FORGEFLOW_SESSION_SECRET || 'forgeflow-local-dev-secret';
 const syncStore = createSyncStore({ filePath: DATA_FILE, secret: SESSION_SECRET });
+const generationGuard = generationGuardFromEnv(process.env);
 const MAX_BODY = 5 * 1024 * 1024;
 
 const MIME = {
@@ -61,15 +67,25 @@ async function resolveFile(abs) {
   }
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   const body = Buffer.from(JSON.stringify(payload));
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': body.length,
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
+    ...extraHeaders,
   });
   res.end(body);
+}
+
+function clientKey(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const address = forwarded.at(-1) || req.socket.remoteAddress || 'unknown';
+  return createHash('sha256').update(address).digest('hex').slice(0, 24);
 }
 
 async function readJson(req) {
@@ -96,7 +112,56 @@ function bearer(req) {
 async function handleApi(req, res, urlPath) {
   try {
     if (urlPath === '/api/health' && req.method === 'GET') {
-      sendJson(res, 200, { ok: true, service: 'forgeflow-sync', storage: 'server' });
+      sendJson(res, 200, {
+        ok: true,
+        service: 'forgeflow',
+        storage: 'server',
+        llm: {
+          configured: !!process.env.DEEPSEEK_API_KEY,
+          provider: 'deepseek',
+          model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+        },
+        generationPolicy: generationGuard.policy(),
+      });
+      return;
+    }
+    if (urlPath === '/api/generate' && req.method === 'POST') {
+      const body = await readJson(req);
+      const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+      if (prompt.length < 4 || prompt.length > 4000) {
+        sendJson(res, 400, { ok: false, error: 'prompt 长度必须为 4 到 4000 个字符。' });
+        return;
+      }
+      const permit = generationGuard.begin(clientKey(req));
+      if (!permit.ok) {
+        const headers = permit.retryAfterSeconds ? { 'retry-after': String(permit.retryAfterSeconds) } : {};
+        sendJson(res, permit.status, { ok: false, code: permit.code, error: permit.error }, headers);
+        return;
+      }
+      const controller = new AbortController();
+      const abort = () => { if (!res.writableEnded) controller.abort(); };
+      req.once('aborted', abort);
+      res.once('close', abort);
+      try {
+        const result = await generateWithDeepSeek({
+          prompt,
+          mode: body.mode === 'modify' ? 'modify' : 'create',
+          appId: typeof body.appId === 'string' ? body.appId : '',
+          previousArtifact: body.previousArtifact && typeof body.previousArtifact === 'object' ? body.previousArtifact : null,
+        }, { signal: controller.signal });
+        if (result.cancelled) {
+          if (!res.writableEnded) sendJson(res, 499, result);
+          return;
+        }
+        sendJson(res, result.ok ? 200 : 502, result, {
+          'x-ratelimit-remaining': String(permit.remaining),
+          'x-daily-limit-remaining': String(permit.dailyRemaining),
+        });
+      } finally {
+        permit.release();
+        req.removeListener('aborted', abort);
+        res.removeListener('close', abort);
+      }
       return;
     }
     if (urlPath === '/api/auth/register' && req.method === 'POST') {
@@ -174,3 +239,10 @@ server.listen(PORT, HOST, () => {
   process.stdout.write(`ForgeFlow dev server running at http://${HOST}:${PORT}\n`);
   process.stdout.write(`Serving: ${ROOT}\n`);
 });
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 125_000).unref();
+  });
+}

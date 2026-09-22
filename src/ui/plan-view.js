@@ -57,8 +57,9 @@ export function renderPlan(container, project, handlers) {
   }
 
   const box = el('div', { class: 'card-box' });
-  box.appendChild(el('h3', { text: plan.mode === 'modify' ? '增量修改计划（待批准）' : '实施计划（待批准）' }));
-  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · 本地规则引擎产出，批准后才会写入版本` }));
+  const llmPlan = plan.engine === 'deepseek';
+  box.appendChild(el('h3', { text: llmPlan ? '真实 LLM 实施计划（待批准）' : plan.mode === 'modify' ? '增量修改计划（待批准）' : '实施计划（待批准）' }));
+  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · ${llmPlan ? '批准后调用 DeepSeek，失败会自动修复且不会覆盖当前版本' : '本地规则引擎产出，批准后才会写入版本'}` }));
 
   const grid = el('div', { class: 'plan-grid' });
   for (const cell of plan.summary) {
@@ -92,32 +93,36 @@ export function renderPlan(container, project, handlers) {
       document.createTextNode(` ${f.type}${f.required ? ' *' : ''}`),
     ]));
   }
-  box.appendChild(el('div', { class: 'plan-edit' }, [
-    el('div', { class: 'row' }, [
-      el('label', { class: 'field' }, [
-        el('span', { text: '应用名称（可改）' }),
-        el('input', { id: 'plan-app-name', type: 'text', value: plan.appName, maxlength: '40' }),
+  if (!llmPlan) {
+    box.appendChild(el('div', { class: 'plan-edit' }, [
+      el('div', { class: 'row' }, [
+        el('label', { class: 'field' }, [
+          el('span', { text: '应用名称（可改）' }),
+          el('input', { id: 'plan-app-name', type: 'text', value: plan.appName, maxlength: '40' }),
+        ]),
+        el('label', { class: 'field' }, [
+          el('span', { text: '默认视图' }),
+          (() => {
+            const sel = el('select', { id: 'plan-view' });
+            const current = findSummary(plan, '默认视图');
+            for (const [value, label] of VIEW_OPTIONS) {
+              sel.appendChild(el('option', { value, text: label, selected: label.startsWith(current) }));
+            }
+            return sel;
+          })(),
+        ]),
       ]),
-      el('label', { class: 'field' }, [
-        el('span', { text: '默认视图' }),
-        (() => {
-          const sel = el('select', { id: 'plan-view' });
-          const current = findSummary(plan, '默认视图');
-          for (const [value, label] of VIEW_OPTIONS) {
-            sel.appendChild(el('option', { value, text: label, selected: label.startsWith(current) }));
-          }
-          return sel;
-        })(),
+      el('div', { class: 'row' }, [
+        checkbox('plan-search', '搜索', planFlag(plan, 'search')),
+        checkbox('plan-filters', '筛选', planFlag(plan, 'filters')),
+        checkbox('plan-stats', '统计', planFlag(plan, 'stats')),
+        checkbox('plan-dark', '暗色主题', findSummary(plan, '主题') === '暗色'),
       ]),
-    ]),
-    el('div', { class: 'row' }, [
-      checkbox('plan-search', '搜索', planFlag(plan, 'search')),
-      checkbox('plan-filters', '筛选', planFlag(plan, 'filters')),
-      checkbox('plan-stats', '统计', planFlag(plan, 'stats')),
-      checkbox('plan-dark', '暗色主题', findSummary(plan, '主题') === '暗色'),
-    ]),
-    chips,
-  ]));
+      chips,
+    ]));
+  } else {
+    box.appendChild(el('p', { class: 'sub', text: '模型只在批准后调用。生成结果必须通过文件完整性、语法、安全和应用专项契约检查。' }));
+  }
 
   if (plan.notes && plan.notes.length) {
     box.appendChild(el('p', { class: 'sub', text: '备注：' + plan.notes.join(' ') }));

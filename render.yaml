@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: forgeflow-atoms-demo
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    maxShutdownDelaySeconds: 130
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: FORGEFLOW_SESSION_SECRET
+        generateValue: true
+      - key: FORGEFLOW_GENERATE_PER_HOUR
+        value: 5
+      - key: FORGEFLOW_GENERATE_DAILY
+        value: 30
+      - key: FORGEFLOW_GENERATE_CONCURRENCY
+        value: 2

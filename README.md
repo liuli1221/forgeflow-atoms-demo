@@ -1,16 +1,16 @@
 # ForgeFlow
 
 > 用一句话描述需求，在同一个工作台里看到 **计划 → 执行轨迹 → 源码 → 预览 → 版本**。
-> 运行在浏览器里的 **Local Agent**，**无需任何 API Key**；可选 Node 账号同步服务，运行时零第三方依赖、零 CDN。
+> **Hybrid Agent**：结构化 CRUD 走确定性本地生成；计算器、贪吃蛇及开放式应用通过服务端 DeepSeek 真实生成。
 
 ForgeFlow 是一个 Atoms-like 的「自然语言生成小型网页应用」工作台 Demo。
-它不调用任何外部大模型，而是用一条**确定性流水线**真实完成工作：
+它不会把所有需求硬套成同一个 CRUD：
 
 - **在线 Demo**：https://liuli1221.github.io/forgeflow-atoms-demo/
 - **GitHub 源码**：https://github.com/liuli1221/forgeflow-atoms-demo
 
 ```
-自然语言 → 规则解析器 → AppSpec（结构化契约） → 人工批准 → 代码生成器 → 确定性校验 → READY 版本 → sandbox 预览
+自然语言 → 路由 → 本地 AppSpec 生成 / POST /api/generate → 确定性校验 → 自动修复 → READY 版本 → sandbox 预览
 ```
 
 ---
@@ -18,7 +18,11 @@ ForgeFlow 是一个 Atoms-like 的「自然语言生成小型网页应用」工�
 ## 1. 运行
 
 ```bash
-# 只运行应用：需要 Node >= 18，无需安装第三方运行时依赖
+# 真实 LLM 模式：Key 只放服务端，.env.local 已被 gitignore
+cp .env.example .env.local
+# 然后只在 .env.local 中替换占位值
+
+# 需要 Node >= 18；运行时无第三方依赖
 node server.mjs
 # 打开 http://127.0.0.1:4173
 
@@ -28,18 +32,19 @@ PORT=8080 node server.mjs
 
 也可以直接用任意静态服务器托管仓库根目录（必须走 http，`file://` 下 ES Modules 会被 CORS 拦截）。
 
-Node 服务模式同时提供账号注册、登录和跨浏览器同步 API。纯静态托管（包括当前 GitHub Pages）会自动保留本地模式，不显示虚假的云同步成功。
+Node 服务模式提供 `/api/generate`、账号注册/登录和跨浏览器同步 API。纯静态托管（包括当前 GitHub Pages）无法执行真实 LLM 与账号同步，只保留本地确定性生成和浏览器持久化。
 
 ## 2. 测试
 
 ```bash
 npm install
-npm run test:unit    # 67 个纯函数/服务端测试
+npm run test:unit    # 79 个纯函数/服务端测试
 npm run test:e2e     # 2 个真实 Chrome E2E
+npm run test:e2e:llm # 真实调用 DeepSeek，产生 API 用量，不纳入默认 test:all
 npm run test:all
 ```
 
-当前：**67 个单元/服务端用例 + 2 个 Playwright Chrome E2E 全部通过**。E2E 覆盖自定义 Schema → 生成 → CRUD → 刷新恢复 → 注册上传 → 第二个浏览器登录下载恢复。
+当前：**79 个单元/服务端用例 + 2 个离线 Playwright Chrome E2E 全部通过**。真实 LLM E2E 会分别生成计算器与贪吃蛇并操作最终页面；它要求有效的 `DEEPSEEK_API_KEY`，不使用 mock，也不纳入默认回归。
 详见 [docs/test-report.md](docs/test-report.md)。
 
 ---
@@ -51,6 +56,7 @@ npm run test:all
 | 1 | 欢迎页 / 初始化 | 首次访问展示产品价值与诚实说明，可「创建第一个项目」或「直接看预置演示」；之后直接进入工作台 |
 | 2 | 三栏工作台 | 左：项目 + 对话；中：Agent 计划 + 运行轨迹；右：预览 / 代码 / Console / 版本。桌面优先，≤760px 变单栏 + 底部导航 |
 | 3 | 真实需求解析 | 支持 task / habit / budget / feedback / inventory / crm / event / library 八类蓝图；未知领域可从“字段包括…”提取自定义 Schema，最后才使用 generic 兜底 |
+| 3a | 真实 LLM 生成 | 计算器、贪吃蛇、游戏/工具及本地解析器未命中的开放需求走 `/api/generate`；服务端调用 DeepSeek 返回三个源码文件 |
 | 4 | 先计划后执行 | 计划卡可改应用名、视图、主题、搜索/筛选/统计开关，点「批准并执行」才动手；轨迹含 analyze → plan → generate → validate → save → ready 六阶段真实状态切换 |
 | 5 | 真实可交互应用 | 生成的应用支持新增 / 编辑 / 删除 / 搜索 / 筛选 / 统计 / 视图切换；不同领域使用不同字段与指标（如记账有「结余」，反馈有「平均评分」） |
 | 6 | Sandbox 预览 + 数据持久化 | `sandbox="allow-scripts allow-forms ..."`（**不含** `allow-same-origin`），业务数据经 postMessage 由宿主写入 `localStorage`，刷新后仍在 |
@@ -59,21 +65,28 @@ npm run test:all
 | 9 | 预置演示项目 | 首次打开自带「面试准备计划器」，由真实流水线跑出来（不是硬编码 fixture）；也可新建空项目 |
 | 10 | 完整状态处理 | 空状态、校验错误、运行中禁用、取消/重试、保存成功反馈、项目 JSON 导入导出（含业务数据） |
 | 11 | 可选账号同步 | Node 服务模式提供密码哈希、签名会话、服务端 JSON 持久化和 revision 冲突检测；静态 Pages 明确降级为本地模式 |
+| 12 | 自动修复 | LLM 产物先过结构、语法、安全和应用专项契约；失败错误连同上一版代码反馈给模型，最多修复 2 次；认证错误立即失败 |
+| 13 | 公网用量保护 | 服务端按匿名客户端限制每小时次数，并设置全站每日预算和并发上限；429/503 明确提示，不记录原始 IP |
 
 ### 关于「Agent」的诚实说明
 
-这里的 Agent 是**运行在你浏览器里的确定性规则引擎**：解析器 + 规划器 + 代码生成器 + 校验器。
-它**不调用任何大模型**。默认不发送数据；只有用户主动登录并点击上传时，才会把状态同步到同源 ForgeFlow 服务端。
-产品界面（欢迎页 badge、顶栏 chip）与文档都明确标注 `Local Agent · 无需 API Key`。
+这里是两条真实执行路径：已支持领域与 CRUD 修改使用浏览器里的确定性 Agent；行为型/开放式需求使用服务端 DeepSeek。浏览器从不接触 Key，只请求同源 `/api/generate`。模型结果不是直接保存：必须通过确定性校验，只有 READY 版本会覆盖当前预览。真实 LLM 不可用时明确报错，不回退成通用条目管理器。
 
 ---
 
 ## 4. 架构
 
 ```
-自然语言
-   │
-   ▼
+自然语言 ──▶ llm-plan.js（意图路由）
+   ├─ 已知 CRUD ──▶ parser.js / mutator.js ──▶ AppSpec ──▶ 本地 generator
+   └─ 行为型/开放需求 ──▶ POST /api/generate ──▶ DeepSeek Responses API
+                                                     │
+                                         三文件 JSON + 专项契约校验
+                                                     │ 失败 → 最多 2 次修复
+                                                     ▼
+                                               READY 版本
+
+原本地链路：
 parser.js ──(关键词打分/否定/句式)──▶ AppSpec ◀── mutator.js（增量修改，纯函数、不可变）
    │                                   │
    │                              spec-schema.js（字段级校验）
@@ -102,11 +115,18 @@ agent.js（状态机 / 六阶段事件）──▶ generator/{html,css,js}.js �
 ```
 atomlite-workbuddy/
 ├── index.html                  # Builder 外壳（欢迎页 + 三栏工作台）
-├── server.mjs                  # Node 静态服务 + auth/sync API，运行时零依赖
+├── server.mjs                  # Node 静态服务 + generate/auth/sync API
+├── server/deepseek-generator.mjs # DeepSeek 调用、结构化输出、自动修复
+├── server/llm-validator.mjs    # LLM 三文件安全与应用专项契约
+├── server/generation-guard.mjs # 每客户端/每日/并发生成额度
+├── server/env.mjs              # 服务端加载被忽略的 .env.local
 ├── server/sync-store.mjs       # scrypt 密码哈希、签名 token、revision 冲突检测
 ├── package.json                # runtime 无 dependencies；Playwright 为 devDependency
+├── render.yaml                 # Render 单 Web Service Blueprint
 ├── playwright.config.js        # Chrome E2E 配置与测试服务
+├── playwright.live.config.js   # 真实 DeepSeek E2E（单独运行）
 ├── e2e/forgeflow.spec.js       # 生成/CRUD/刷新/跨浏览器同步完整链路
+├── e2e-live/llm-apps.spec.js   # 计算器 7+5=12 / 贪吃蛇启动与方向键
 ├── src/
 │   ├── core/                   # 纯逻辑层：无 DOM，Node 可直接 import
 │   │   ├── util.js             # id / 转义 / 安全 JSON 序列化
@@ -130,32 +150,27 @@ atomlite-workbuddy/
 │   │   ├── sync-client.js      # 登录会话与手动上传/下载
 │   │   ├── sidebar.js  plan-view.js  viewer.js  dom.js  toast.js
 │   └── styles/                 # base / workbench / responsive
-├── test/                       # node:test，8 个测试文件
-└── docs/                       # architecture.md / test-report.md
+├── test/                       # node:test（解析/生成/修复/限流/持久化）
+└── docs/                       # architecture / test report / Render deploy
 ```
 
 ---
 
-## 6. 部署到 GitHub Pages
+## 6. GitHub + Render 单服务部署
 
-Builder 本体仍可作为纯静态站点部署，**不需要构建步骤**。
+完整 AI Demo 使用仓库根目录的 `render.yaml` 部署为一个 Node Web Service：同一域名同时提供前端、`/api/generate` 和账号同步 API。
 
-```bash
-git remote add origin git@github.com:<you>/<repo>.git
-git push -u origin main
-```
+1. 将已验证代码推送到 GitHub。
+2. Render 选择 **New → Blueprint** 并连接本仓库。
+3. 创建时填写 `DEEPSEEK_API_KEY`；Blueprint 中使用 `sync: false`，Key 不进入 Git。
+4. Render 自动执行 `npm ci --omit=dev`、`npm start`，并用 `/api/health` 检查服务。
+5. 用生成的 `onrender.com` 地址完成计算器、贪吃蛇、刷新恢复和限流验收。
 
-然后在 GitHub 仓库 → **Settings → Pages**：
+默认公网保护：每客户端每小时 5 次、全站每天 30 次、最多 2 个并发生成；可通过环境变量调整。完整操作见 [docs/render-deploy.md](docs/render-deploy.md)。
 
-- **Source**: `Deploy from a branch`
-- **Branch**: `main` / `(root)`
+### 静态降级版
 
-保存后访问 `https://<you>.github.io/<repo>/` 即可。
-
-注意事项：
-- 所有资源都是相对路径（`./src/...`），放在子路径下也能工作。
-- 页面运行不依赖 `node_modules` 或 CDN。
-- GitHub Pages 不执行 `server.mjs`，因此公开 Pages 仍是浏览器本地持久化；若要跨设备同步，必须把 Node 服务部署到可持久化磁盘的运行环境，并配置 `FORGEFLOW_SESSION_SECRET` 与 `FORGEFLOW_DATA_FILE`。
+现有 GitHub Pages 可继续作为不需要构建步骤的静态版本，但它不执行 `server.mjs`，因此没有真实 LLM 和账号同步。提交给面试官的完整验收链接应使用 Render 地址。
 
 ---
 
@@ -164,23 +179,26 @@ git push -u origin main
 1. **首屏**：打开站点 → 欢迎页 → 点「直接看预置演示」。
 2. **看现成项目**：左栏选中「面试准备计划器」，右栏「预览」里直接新增/编辑/删除一条任务，观察统计卡片变化。
 3. **刷新持久化**：按 F5，刚才改的业务数据仍在。
-4. **新建项目**：左栏「+ 新建」→ 输入
+4. **真实计算器**：左栏「+ 新建」→ 输入 `生成一个现代风格计算器，支持加减乘除、清空和连续计算` → 批准 → 实际点击 `7 + 5 =` 得到 `12`。
+5. **真实贪吃蛇**：新建项目 → 输入 `生成一个贪吃蛇游戏，支持方向键控制、计分、碰撞结束和重新开始` → 批准 → 启动并用方向键操作。
+6. **本地 CRUD**：左栏「+ 新建」→ 输入
    `做一个求职开销记账本，记录收支和分类` → 发送。
-5. **审批计划**：中间栏出现计划卡，改一下应用名、勾掉「搜索」，点「批准并执行」→ 观察六阶段轨迹实时切换。
-6. **看代码**：右栏「代码」标签，切换 `index.html / styles.css / app.js`，可复制、可下载。
-7. **增量修改**：输入 `增加负责人字段，切换暗色主题` → 批准 → 生成 v2。
-8. **版本恢复**：右栏「版本」→ 选 v1 →「恢复为当前版本」，预览立刻回到旧版。
-9. **开放 Schema**：新建项目并输入 `做一个宠物档案，字段包括宠物名、品种(猫/狗/其他)、出生日期、是否绝育、体重`。
-10. **账号同步（Node 服务模式）**：注册 → 上传；开一个无痕窗口登录同一账号 → 下载，项目与业务数据恢复。
-11. **导出**：顶栏「导出 JSON」，得到包含版本与业务数据的项目文件；用「导入 JSON」可再导入一份。
-12. **移动端**：把窗口拉窄到 <760px，底部出现「对话 / 计划 / 预览」导航。
+7. **审批计划**：中间栏出现计划卡，点「批准并执行」→ 观察生成、校验、修复、保存轨迹。
+8. **看代码**：右栏「代码」标签，切换 `index.html / styles.css / app.js`，可复制、可下载。
+9. **增量修改**：输入 `增加负责人字段，切换暗色主题` → 批准 → 生成 v2。
+10. **版本恢复**：右栏「版本」→ 选 v1 →「恢复为当前版本」，预览立刻回到旧版。
+11. **开放 Schema**：新建项目并输入 `做一个宠物档案，字段包括宠物名、品种(猫/狗/其他)、出生日期、是否绝育、体重`。
+12. **账号同步（Node 服务模式）**：注册 → 上传；开一个无痕窗口登录同一账号 → 下载，项目与业务数据恢复。
+13. **导出**：顶栏「导出 JSON」，得到包含版本与业务数据的项目文件；用「导入 JSON」可再导入一份。
+14. **移动端**：把窗口拉窄到 <760px，底部出现「对话 / 计划 / 预览」导航。
 
 ---
 
 ## 8. 已知限制
 
-- 解析器仍是**规则驱动**而不是 LLM；现在支持 8 类蓝图与显式字段 Schema，但没有显式字段且未命中领域的描述仍会落到 `generic`。
-- 生成的应用是单页 CRUD 工具，不支持关系型数据、图表、导入 CSV。
+- 本地路径仍是规则驱动；计算器、贪吃蛇、游戏/工具类和未命中需求改走 DeepSeek，不再回退成 generic CRUD。
+- LLM 产物被限制为三个无外部依赖的单页文件，禁止自行联网、动态执行代码和直接访问浏览器存储。
+- `.env.local` 只适合本机；部署时必须用托管平台的服务端环境变量，不能把 Key 放进前端或 Git。
 - 版本历史上限 30 条，超出后滚动淘汰最早的版本。
 - 「下载全部」是逐个文件下载（不打包 zip），因为不引入任何依赖。
 - 预览 iframe 没有 `allow-same-origin`，因此生成应用在预览中通过 postMessage 持久化；单独下载后独立打开时自动改用自己的 `localStorage`。

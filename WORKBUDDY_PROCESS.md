@@ -7,6 +7,10 @@
 - 工作目录：`/Users/lilianlliu/Documents/Codex/2026-09-19/w/atomlite-workbuddy`
 - 运行环境：macOS (darwin-arm64) · Node v22.22.2 · git 2.48.1
 
+> 说明：第 0–9 节记录 2026-09-19 至 2026-09-21 的原始本地 Agent 方案，属于历史决策记录。
+> 面试官随后要求计算器/贪吃蛇必须按需求真实生成；2026-09-22 的 Hybrid Agent 改造见第 10 节，
+> 当前 README 与架构文档以改造后的实现为准。
+
 ---
 
 ## 0. 原始题目理解
@@ -281,3 +285,32 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 - **S6 完成**：当前会话独立执行 `node --test`（64/64）并连接 Chrome 跑通新建项目、计划审批、生成、预览 CRUD、刷新持久化、增量修改、v1 恢复、代码查看与 JSON 导出；具体证据见 6.3。
 - **S7 完成**：创建公开仓库 `liuli1221/forgeflow-atoms-demo`；在终端 HTTPS/SSH 凭据均不可用时，改用 GitHub 网页上传 + 一次性 Actions 解包，第二次工作流成功；启用 `main/(root)` Pages，`pages-build-deployment` 成功，并在公网地址完成欢迎页和预置演示冒烟验收。
 - **S8 完成**：针对面试反馈，扩展 8 类蓝图与 custom Schema；增加账号/服务端同步及 revision 冲突保护；加入 Playwright devDependency 与 2 条 Chrome E2E。最终实际结果：67/67 unit、2/2 E2E。
+
+---
+
+## 10. 第二轮抢救：真实 DeepSeek 生成（2026-09-22）
+
+面试官复测发现“生成计算器/贪吃蛇”仍落入 generic CRUD。本轮不再扩关键词模板，而是增加一条真实 LLM 路径：
+
+1. `llm-plan.js` 把计算器、贪吃蛇、游戏/工具类和本地解析 fallback 路由到 DeepSeek；已知 CRUD 继续走原确定性链路；
+2. `POST /api/generate` 在 Node 服务端读取 `DEEPSEEK_API_KEY`，浏览器与生成应用都看不到 Key；
+3. DeepSeek 使用 JSON Schema 返回 `index.html/styles.css/app.js`，不是预写计算器或贪吃蛇模板；
+4. `llm-validator.mjs` 校验三文件、JS 语法、外部网络/动态执行等安全约束，以及计算器/贪吃蛇专项交互契约；
+5. 产物校验失败时，把错误与上一版 bundle 回送模型，最多 2 次自动修复；401/403 立即失败；
+6. 只有校验通过才写 READY 版本；失败或取消保留当前版本；预览额外注入 CSP 禁止联网；
+7. 新增真实 LLM Playwright：计算器必须点击 `7 + 5 =` 得到 `12`，贪吃蛇必须可启动并响应方向键。
+
+本轮真实 LLM 基础改造执行结果：`npm run test:unit` **75/75**，`npm run test:e2e` **2/2**。`npm run test:e2e:llm`
+确实到达 DeepSeek，但当前本地凭证被服务端判定为 invalid，故 **0/2**；这两条不能标记为通过，替换有效 Key 后必须重跑。
+
+新的部署边界：GitHub Pages 只能运行静态本地链路，不能承载 `/api/generate`。完整在线 Demo 必须部署 Node 服务并在服务端环境变量中配置 Key。
+
+### 10.1 GitHub + Render 单服务发布准备
+
+随后按公开 Demo 风险补齐部署层：新增 `render.yaml`，使用一个 Node Web Service 同时承载静态前端和三组 API；
+绑定 `0.0.0.0`、使用 Render 的 `PORT`、配置 `/api/health`、自动生成会话密钥并把 DeepSeek Key 标为
+`sync:false`。新增生成用量保护：每客户端小时额度、全站每日预算、并发上限、429/503 与 `Retry-After`，
+原始 IP 只在内存中参与摘要、不写日志。新增 4 条限流测试后单元/服务端结果为 **79/79**。
+
+账号同步的 JSON 在 Render Free 文件系统上不是持久存储；浏览器 localStorage 的刷新恢复仍有效，但若要承诺
+跨设备长期恢复，需要付费持久化磁盘并设置 `FORGEFLOW_DATA_FILE`。详细步骤记录在 `docs/render-deploy.md`。

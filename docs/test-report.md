@@ -1,9 +1,9 @@
 # 测试报告
 
 - 项目：ForgeFlow（`w/atomlite-workbuddy`）
-- 更新日期：2026-09-21
+- 更新日期：2026-09-22
 - 环境：macOS (darwin-arm64) · Node v26.0.0 · Chrome
-- 命令：`npm run test:unit` / `npm run test:e2e`
+- 命令：`npm run test:unit` / `npm run test:e2e` / `npm run test:e2e:llm`
 
 > **口径说明**：本报告只记录**实际执行过**的验证。Node 回归与 Playwright Chrome E2E 均可重复运行；跨浏览器与真实移动设备仍未覆盖。
 
@@ -13,14 +13,14 @@
 
 ```
 $ npm run test:unit
-# tests 67
+# tests 79
 # suites 0
-# pass 67
+# pass 79
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms ≈ 170
+# duration_ms ≈ 196
 
 $ npm run test:e2e
 2 passed
@@ -36,8 +36,13 @@ $ npm run test:e2e
 | `test/agent.test.mjs` | 11 | ✅ | `core/agent.js`（状态机/六阶段/取消） |
 | `test/hidden-visibility.test.mjs` | 9 | ✅ | **hidden 显隐回归（本次 P0 bugfix）** |
 | `test/sync-store.test.mjs` | 1 | ✅ | 注册/登录/密码哈希/快照/revision 冲突 |
-| 单元与服务端合计 | **67** | **67 pass / 0 fail** | |
+| `test/llm-plan.test.mjs` | 2 | ✅ | 计算器/贪吃蛇强制 LLM 路由，已知 CRUD 保留本地路径 |
+| `test/llm-validator.test.mjs` | 3 | ✅ | 计算器/贪吃蛇契约与危险 API 门禁 |
+| `test/deepseek-generator.test.mjs` | 3 | ✅ | 自动修复、缺 Key、认证失败立即停止 |
+| `test/generation-guard.test.mjs` | 4 | ✅ | 每客户端时窗、全站每日预算、并发令牌、环境配置 |
+| 单元与服务端合计 | **79** | **79 pass / 0 fail** | |
 | `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome：生成/CRUD/刷新/跨浏览器账号同步/页面错误 |
+| `e2e-live/llm-apps.spec.js` | 2 | ❌ 当前凭证失败 | 真实 DeepSeek：计算器 `7+5=12`、贪吃蛇启动/方向键 |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -117,6 +122,20 @@ $ npm run test:e2e
 ### 2.9 `e2e/forgeflow.spec.js`（2）
 
 真实 Chrome 覆盖 custom Schema 生成、计划审批、预览 CRUD、整页刷新恢复、账号注册上传、第二浏览器登录下载恢复，以及首屏 `pageerror` 冒烟检查。
+
+### 2.10 LLM 生成与修复（8）
+
+- 计算器、贪吃蛇与行为型需求强制走 DeepSeek，不允许 generic CRUD；已知任务 CRUD 仍走快速确定性路径。
+- 三文件生成包必须通过 HTML、JS 语法、安全与专项交互契约。
+- fake transport 首轮返回缺少计算器契约的代码，第二轮断言修复 prompt 包含确定性校验错误，并成功产出 READY 结果。
+- 没有 Key 时不请求模型；401 认证失败只请求一次，不进入无意义的代码修复。
+
+### 2.11 公网生成保护（4）
+
+- 同一匿名客户端达到小时额度后返回 429，窗口结束后恢复；
+- 并发上限返回 503，任务结束释放令牌，重复释放不会破坏计数；
+- 每日预算跨客户端生效，并在 UTC 次日重置；
+- Render/本地环境变量可调整三类限制，异常值回落到安全默认值。
 
 ---
 
@@ -212,6 +231,16 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 - 没有跨浏览器兼容性验证。
 - `src/ui/*` 没有细粒度单元测试；核心 UI 主链由 E2E 覆盖。
 - 无可访问性专项审计、无跨浏览器兼容性测试。
+
+### 4.4 已执行但未通过：真实 DeepSeek E2E
+
+`npm run test:e2e:llm` 于 2026-09-22 实际启动 Chrome，并分别从自然语言创建计算器和贪吃蛇项目。
+两个用例均正确进入 `DeepSeek LLM` 计划与 `/api/generate`，但 DeepSeek 服务端返回
+`Authentication Fails ... api key ... is invalid`，因此没有生成 v1，最终 **0/2 通过**。
+
+这不是“已通过”的证据。替换为 DeepSeek 官方平台的有效 `DEEPSEEK_API_KEY` 后必须重新执行；测试会在
+生成成功后实际点击计算器 `7 + 5 =` 并断言 `12`，以及启动贪吃蛇、断言状态为 `running` 并发送方向键。
+该 live 套件单独运行，会产生真实 API 用量，不包含在 `npm run test:all` 中。
 
 ## 5. 已执行的非单测验证
 

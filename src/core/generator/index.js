@@ -34,9 +34,11 @@ export function generateFiles(spec) {
  */
 export function buildPreviewDocument(files) {
   const html = files['index.html'];
-  return html
+  const inlined = html
     .replace(LINK_TAG, '<style>\n' + files['styles.css'] + '\n</style>')
     .replace(SCRIPT_TAG, '<script>\n' + files['app.js'] + '\n</script>');
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; media-src data: blob:">`;
+  return inlined.includes('<head>') ? inlined.replace('<head>', `<head>\n${csp}`) : inlined;
 }
 
 export function totalSize(files) {

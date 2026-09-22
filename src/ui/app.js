@@ -10,10 +10,13 @@ import { initToast, toast } from './toast.js';
 import { createAppStore } from './store.js';
 import { createPreviewBridge } from './preview-bridge.js';
 import { createSyncClient } from './sync-client.js';
+import { createLlmClient } from './llm-client.js';
 import { renderProjects, renderChat, renderSuggestions } from './sidebar.js';
 import { renderPlan, renderTrace } from './plan-view.js';
 import { renderFileTabs, renderCode, renderConsole, renderVersions } from './viewer.js';
 import { prepareRequest, executeRun, applyPlanOverrides } from '../core/agent.js';
+import { prepareLlmRequest, shouldUseLlm } from '../core/llm-plan.js';
+import { executeLlmRun } from '../core/llm-agent.js';
 import { restoreVersion, findVersion, appendVersion } from '../core/versions.js';
 import { buildSeedProject } from '../core/seed.js';
 import { buildExportPayload, parseImport, dedupeProjectId, collectAppIds } from '../core/storage.js';
@@ -21,6 +24,7 @@ import { uid, nowIso } from '../core/util.js';
 
 const store = createAppStore();
 const syncClient = createSyncClient();
+const llmClient = createLlmClient();
 const SYNC_BACKUP_KEY = 'forgeflow.v1.pre_sync_backup';
 
 const ui = {};
@@ -33,6 +37,8 @@ let loadedPreviewKey = '';
 let bridge = null;
 let syncAvailable = false;
 let syncBusy = false;
+let llmAvailable = false;
+let activeGenerationController = null;
 
 /* ------------------------------------------------------------- logging */
 function log(level, message) {
@@ -112,9 +118,11 @@ function render() {
   ui.btnSend.disabled = busy || !p;
   ui.composerHint.textContent = busy
     ? 'Agent 正在执行，请稍候或点击「取消运行」。'
-    : p && p.spec
+    : p && p.spec && p.spec.engine === 'deepseek'
+      ? '继续描述功能修改，DeepSeek 会基于当前完整代码生成新版本。'
+      : p && p.spec
       ? '继续输入修改要求，例如「增加优先级」「切换暗色主题」。'
-      : '描述你想要的小应用，Agent 会先给出计划。';
+      : '描述任意小应用；游戏/工具类会使用真实 DeepSeek LLM。';
 
   syncPreview();
 }
@@ -200,7 +208,10 @@ async function submitPrompt(text) {
   pushMessage('user', prompt);
   previewVersionId = null;
 
-  const result = prepareRequest(p, prompt);
+  const localResult = prepareRequest(p, prompt);
+  const result = shouldUseLlm(p, prompt, localResult)
+    ? prepareLlmRequest(p, prompt, { available: llmAvailable })
+    : localResult;
   if (!result.ok) {
     pushMessage('agent', result.error, 'error');
     log('warn', `解析失败：${result.error}`);
@@ -215,6 +226,7 @@ async function submitPrompt(text) {
     proj.pendingPrompt = prompt;
     proj.pendingMode = result.mode;
     proj.pendingChanges = result.changes;
+    proj.pendingEngine = result.engine || 'local';
     proj.lastPrompt = prompt;
     proj.analysis = result.analysis;
     proj.status = 'awaiting_approval';
@@ -233,8 +245,10 @@ async function approvePlan(overrides) {
   if (!p || !p.pendingSpec) return;
   if (p.status === 'running') return;
 
-  const spec = applyPlanOverrides(p.pendingSpec, overrides);
+  const useLlm = p.pendingEngine === 'deepseek';
+  const spec = useLlm ? p.pendingSpec : applyPlanOverrides(p.pendingSpec, overrides);
   cancelRequested = false;
+  activeGenerationController = useLlm ? new AbortController() : null;
 
   mutateProject((proj) => {
     proj.status = 'running';
@@ -244,9 +258,7 @@ async function approvePlan(overrides) {
   render();
   log('info', `开始执行：${spec.appName}`);
 
-  const result = await executeRun(
-    { project: p, spec, mode: p.pendingMode, changes: p.pendingChanges || [], prompt: p.pendingPrompt },
-    {
+  const sharedHooks = {
       onEvent: (evt) => {
         mutateProject((proj) => {
           const i = proj.runEvents.findIndex((e) => e.stage === evt.stage);
@@ -257,8 +269,20 @@ async function approvePlan(overrides) {
         if (evt.status !== 'running') log(evt.status === 'failed' ? 'error' : 'info', `[${evt.stage}] ${evt.label} ${evt.detail || ''}`.trim());
       },
       shouldCancel: () => cancelRequested,
-    }
-  );
+    };
+  const result = useLlm
+    ? await executeLlmRun(
+      { project: p, spec, mode: p.pendingMode, changes: p.pendingChanges || [], prompt: p.pendingPrompt },
+      {
+        ...sharedHooks,
+        generate: (payload) => llmClient.generate(payload, { signal: activeGenerationController.signal }),
+      },
+    )
+    : await executeRun(
+      { project: p, spec, mode: p.pendingMode, changes: p.pendingChanges || [], prompt: p.pendingPrompt },
+      sharedHooks,
+    );
+  activeGenerationController = null;
 
   if (result.cancelled) {
     mutateProject((proj) => { proj.status = 'awaiting_approval'; });
@@ -290,11 +314,14 @@ async function approvePlan(overrides) {
     proj.pendingPlan = null;
     proj.pendingSpec = null;
     proj.pendingChanges = [];
+    proj.pendingEngine = null;
     if (proj.name.startsWith('新项目')) proj.name = result.version.spec.appName;
   }, { immediate: true });
 
   const changed = result.version.changes.length ? `（${result.version.changes.join('；')}）` : '';
-  pushMessage('agent', `${result.version.label} 已保存${changed}。右侧预览已刷新，数据会自动持久化；可以继续说「增加xx字段」「切换暗色主题」。`);
+  pushMessage('agent', useLlm
+    ? `${result.version.label} 已保存${changed}。这是由 ${result.model || 'DeepSeek'} 真实生成并通过校验的应用，可继续输入修改要求。`
+    : `${result.version.label} 已保存${changed}。右侧预览已刷新，数据会自动持久化；可以继续说「增加xx字段」「切换暗色主题」。`);
   toast(`${result.version.label} 保存成功`, 'ok');
   log('info', `版本保存：${result.version.label}`);
   previewVersionId = null;
@@ -307,6 +334,7 @@ function discardPlan() {
   mutateProject((p) => {
     p.pendingPlan = null;
     p.pendingSpec = null;
+    p.pendingEngine = null;
     p.status = p.spec ? 'ready' : 'idle';
   });
   pushMessage('agent', '计划已取消，没有任何文件被修改。');
@@ -316,6 +344,7 @@ function discardPlan() {
 
 function cancelRun() {
   cancelRequested = true;
+  if (activeGenerationController) activeGenerationController.abort();
   log('warn', '收到取消请求，将在当前阶段结束后停止。');
   toast('正在取消…', 'warn');
 }
@@ -449,6 +478,8 @@ async function withSyncBusy(action) {
 async function checkSyncHealth() {
   const health = await syncClient.health();
   syncAvailable = !!health.ok;
+  llmAvailable = !!(health.ok && health.llm && health.llm.configured);
+  if (ui.agentBadge) ui.agentBadge.textContent = llmAvailable ? `Hybrid Agent · ${health.llm.model}` : 'Local Agent · LLM 未连接';
   ui.btnCloud.textContent = syncAvailable ? '账号同步' : '本地数据';
   renderSyncState();
 }
@@ -527,6 +558,7 @@ function cacheDom() {
   ui.projectList = $('#project-list');
   ui.projectTitle = $('#project-title');
   ui.agentState = $('#agent-state');
+  ui.agentBadge = $('#agent-badge');
   ui.chatLog = $('#chat-log');
   ui.suggestions = $('#suggestions');
   ui.composer = $('#composer');
@@ -715,7 +747,7 @@ function init() {
   else ui.welcome.hidden = false;
 
   render();
-  log('info', 'ForgeFlow 就绪 · 本地 Agent，无需 API Key');
+  log('info', 'ForgeFlow 就绪 · 本地确定性生成器 + 可选 DeepSeek LLM');
 }
 
 init();

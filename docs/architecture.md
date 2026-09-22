@@ -4,7 +4,8 @@
 
 | 约束 | 决策 |
 |------|------|
-| 线上 Demo 不能要 API Key | 用**确定性本地 Agent**（解析器 + 规划器 + 生成器 + 校验器）替代 LLM，并在 UI/文档中如实标注 |
+| Key 不能进入浏览器 | DeepSeek Key 只由 Node 服务从 `.env.local` / 部署环境变量读取，浏览器只请求同源 `/api/generate` |
+| 不能把游戏降级为 CRUD | 已知 CRUD 走确定性本地 Agent；计算器、贪吃蛇与开放式应用强制走真实 LLM，失败时明确报错 |
 | 不能依赖 CDN / npm | 原生 HTML + CSS + ES Modules；`package.json` 无 `dependencies`；`server.mjs` 只用 `node:http` / `node:fs` |
 | 可直接部署 GitHub Pages | 纯静态、全相对路径、无构建步骤 |
 | 可测试 | 所有业务逻辑放在 `src/core/`，**不引用任何 DOM/BOM 全局**，`node --test` 可以直接 import |
@@ -18,14 +19,41 @@
 └───────────────────────────────────────────┬──────────────────────────────────────────────────┘
                                             │ 只调用纯函数，不反向依赖
 ┌───────────────────────────────────────────▼──────────── src/core（纯逻辑层，DOM-free）───────┐
-│ parser.js  mutator.js  blueprints.js  spec-schema.js  sync-client.js                         │
-│ planner.js  agent.js（状态机）  generator/*  validator.js  versions.js  storage.js  seed.js   │
+│ parser.js  mutator.js  blueprints.js  spec-schema.js  llm-plan.js                             │
+│ planner.js  agent.js / llm-agent.js  generator/*  validator.js  versions.js  storage.js       │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
+                                            │ 同源 JSON API
+┌───────────────────────────────────────────▼──────────── server（可信服务端）──────────────────┐
+│ /api/generate → deepseek-generator.mjs → DeepSeek Responses API → llm-validator.mjs           │
+│ /api/auth + /api/sync → sync-store.mjs                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 依赖方向是单向的：`ui → core`。core 内部也保持单向：
 `blueprints → parser/mutator → planner → agent → generator → validator → versions → storage`；
-Node 服务模式额外提供 `sync-client → /api/auth + /api/sync → sync-store`。
+Node 服务模式额外提供 `llm-client → /api/generate → deepseek-generator` 和
+`sync-client → /api/auth + /api/sync → sync-store`。
+
+## 2.1 Hybrid Agent 路由与自动修复
+
+`shouldUseLlm()` 根据行为型需求（计算器、游戏、计时器、画板等）、本地解析 fallback，以及项目原有
+`spec.engine === 'deepseek'` 决定路径。命中 LLM 后不会再调用 generic CRUD。
+
+```text
+prompt → 计划审批 → POST /api/generate
+                    → DeepSeek JSON Schema 输出三个文件
+                    → llm-validator（结构/语法/安全/专项契约）
+                    ├─ pass → READY 版本 → sandbox
+                    └─ fail → 错误 + 上一版 bundle 回送模型（最多 2 次）
+```
+
+自动修复只处理“模型已生成代码但未通过校验”的情况。401/403 等认证配置错误立即返回；限流、超时和
+服务端异常保留失败轨迹。任何失败都不创建版本、不覆盖当前 READY 版本。
+
+公网部署时，`generation-guard.mjs` 在调用模型前发放内存令牌：默认每个匿名客户端每小时 5 次、全站
+每天 30 次、最多 2 个并发任务。客户端地址先做 SHA-256 摘要，服务不记录原始 IP。时窗/预算超限返回
+429，并发超限返回 503；响应携带 `Retry-After`，任务在成功、失败或取消后都会释放并发令牌。该方案适合
+单实例面试 Demo；若扩展到多个实例，应把计数器迁移到共享的 Redis/Key Value。
 
 ## 3. 核心数据结构：AppSpec
 
@@ -133,6 +161,11 @@ script 标签数量、CSS 主题变量、CSS 断点（warn）、`[hidden]` 强�
 禁用 API、AppSpec 以数据形式注入、持久化通道存在、无未转义标签、预览文档可组装。
 
 任何一项 `fail` → 整个 run 失败。`warn` 不阻断。
+
+LLM 路径另由 `server/llm-validator.mjs` 校验：文件只能是 `index.html/styles.css/app.js`，HTML 只能引用这
+两个本地资源，JS 必须通过语法检查，并禁止 `innerHTML/eval/fetch/WebSocket/localStorage` 等危险或越界
+能力。计算器必须暴露可执行 `7 + 5 = 12` 的稳定测试标识；贪吃蛇必须有 Canvas、分数、启动状态、方向键
+处理和游戏循环。预览组装时再注入 CSP，禁止生成页面主动联网。
 
 ## 9. 预览与数据持久化
 
