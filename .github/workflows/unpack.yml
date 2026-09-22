@@ -10,15 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Unpack release
+      - name: Unpack release and remove stale deployment files
         id: unpack
         run: |
-          if [ ! -f forgeflow-vercel-release.zip ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          rm -f render.yaml docs/render-deploy.md
+          if [ -f forgeflow-vercel-release.zip ]; then
+            unzip -o forgeflow-vercel-release.zip
+            rm forgeflow-vercel-release.zip
           fi
-          unzip -o forgeflow-vercel-release.zip
-          rm forgeflow-vercel-release.zip
+          if git diff --quiet && [ -z "$(git status --short)" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Commit extracted project
         if: steps.unpack.outputs.skip != 'true'
         run: |
