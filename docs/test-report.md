@@ -44,6 +44,7 @@ $ npm run test:e2e
 | 单元与服务端合计 | **82** | **82 pass / 0 fail** | |
 | `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome：生成/CRUD/刷新/跨浏览器账号同步/页面错误 |
 | `e2e-live/llm-apps.spec.js` | 2 | ✅ | 真实 DeepSeek：计算器 `7+5=12`、贪吃蛇启动/方向键 |
+| `playwright.production.config.js` + `e2e-live/llm-apps.spec.js` | 2 | ✅ | Vercel Production：同一套计算器/贪吃蛇浏览器 E2E |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -137,6 +138,12 @@ $ npm run test:e2e
 - 并发上限返回 503，任务结束释放令牌，重复释放不会破坏计数；
 - 每日预算跨客户端生效，并在 UTC 次日重置；
 - Vercel/本地环境变量可调整三类限制，异常值回落到安全默认值。
+
+### 2.12 Vercel Production 验收（2026-09-23）
+
+- `GET https://forgeflow-atoms-demo.vercel.app/api/health` 返回 `runtime=vercel-function`、`storage=browser`、`llm.configured=true`；
+- 线上 `POST /api/generate` 真实调用 DeepSeek，计算器首轮通过确定性校验并返回三个源码文件；
+- `npm run test:e2e:production`：计算器实际点击 `7 + 5 =` 得到 `12`，贪吃蛇启动后状态为 `running` 并响应方向键，**2/2 通过**。
 
 ---
 

@@ -4,6 +4,8 @@ ForgeFlow 在 Vercel 上使用一个 Project：仓库根目录作为静态前端
 `api/generate.mjs` 作为 Node.js Serverless Functions。浏览器与 API 同域，不需要 CORS；DeepSeek Key
 只存在于 Vercel 服务端环境变量。
 
+当前 Production：<https://forgeflow-atoms-demo.vercel.app/>
+
 ## 1. 部署前验证
 
 ```bash
@@ -11,9 +13,11 @@ npm ci
 npm run test:unit
 npm run test:e2e
 npm run test:e2e:llm
+npm run test:e2e:production
 ```
 
-最近一次实际结果：82/82 unit/service/function、2/2 离线 Chrome E2E、2/2 真实 DeepSeek E2E。
+最近一次实际结果：82/82 unit/service/function、2/2 离线 Chrome E2E、2/2 本地真实 DeepSeek E2E、
+2/2 Vercel Production E2E。
 live 套件会产生真实 API 用量。
 
 ## 2. 导入 GitHub 仓库

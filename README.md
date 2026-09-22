@@ -6,7 +6,7 @@
 ForgeFlow 是一个 Atoms-like 的「自然语言生成小型网页应用」工作台 Demo。
 它不会把所有需求硬套成同一个 CRUD：
 
-- **完整 AI Demo**：部署完成后填写 Vercel Production URL
+- **完整 AI Demo**：https://forgeflow-atoms-demo.vercel.app/
 - **静态降级 Demo**：https://liuli1221.github.io/forgeflow-atoms-demo/
 - **GitHub 源码**：https://github.com/liuli1221/forgeflow-atoms-demo
 
@@ -42,10 +42,11 @@ npm install
 npm run test:unit    # 82 个纯函数/服务端/Vercel Function 测试
 npm run test:e2e     # 2 个真实 Chrome E2E
 npm run test:e2e:llm # 真实调用 DeepSeek，产生 API 用量，不纳入默认 test:all
+npm run test:e2e:production # 直接验收 Vercel Production URL
 npm run test:all
 ```
 
-当前：**82 个单元/服务端用例 + 2 个离线 Playwright Chrome E2E + 2 个真实 DeepSeek Chrome E2E 全部通过**。真实 LLM E2E 分别生成计算器与贪吃蛇并操作最终页面；它要求有效的 `DEEPSEEK_API_KEY`，不使用 mock，也不纳入默认回归。
+当前：**82 个单元/服务端用例 + 2 个离线 Playwright Chrome E2E + 2 个本地真实 DeepSeek Chrome E2E + 2 个 Vercel Production E2E 全部通过**。真实 LLM E2E 分别生成计算器与贪吃蛇并操作最终页面；它要求有效的 `DEEPSEEK_API_KEY`，不使用 mock，也不纳入默认回归。
 详见 [docs/test-report.md](docs/test-report.md)。
 
 ---

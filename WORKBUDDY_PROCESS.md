@@ -325,3 +325,14 @@ Vercel 版本新增 `api/health.mjs`、`api/generate.mjs` 和 `vercel.json`：�
 新增 3 条 Vercel Function 回归后，实际结果为 **82/82 unit/service/function + 2/2 离线 Chrome E2E +
 2/2 真实 DeepSeek E2E**。实例内限流在 Serverless 多实例环境只是 best effort，正式生产需要共享 Redis/KV；
 完整步骤与验收口径见 `docs/vercel-deploy.md`。
+
+### 10.3 Vercel Production 发布与线上验收
+
+2026-09-23 将 `liuli1221/forgeflow-atoms-demo` 导入 Vercel。首次自动识别为 Node preset，线上 `/api/health`
+仍命中旧 `server.mjs`；随后将 Framework Preset 修正为 `Other`、覆盖有效的服务端 DeepSeek Secret 并重新部署。
+最终 Production URL 为 `https://forgeflow-atoms-demo.vercel.app/`，健康检查返回
+`runtime: vercel-function`、`storage: browser`、`llm.configured: true`。
+
+新增可重复运行的 `npm run test:e2e:production`。它直接访问 Production URL，真实生成并操作计算器与贪吃蛇；
+实际结果为 **2/2 通过**：计算器 `7+5=12`，贪吃蛇可启动并响应方向键。该结果与本地离线 E2E、
+本地真实 DeepSeek E2E 分开记录，没有把“部署 READY”误当成“功能验收通过”。
