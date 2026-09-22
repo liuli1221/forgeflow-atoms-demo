@@ -6,7 +6,7 @@
 |------|------|
 | Key 不能进入浏览器 | DeepSeek Key 只由 Node 服务从 `.env.local` / 部署环境变量读取，浏览器只请求同源 `/api/generate` |
 | 不能把游戏降级为 CRUD | 已知 CRUD 走确定性本地 Agent；计算器、贪吃蛇与开放式应用强制走真实 LLM，失败时明确报错 |
-| 不能依赖 CDN / npm | 原生 HTML + CSS + ES Modules；`package.json` 无 `dependencies`；`server.mjs` 只用 `node:http` / `node:fs` |
+| 不能依赖 CDN / npm | 原生 HTML + CSS + ES Modules；`package.json` 无 `dependencies`；本地服务和 Vercel Functions 都只用 Node 内置能力 |
 | 可直接部署 GitHub Pages | 纯静态、全相对路径、无构建步骤 |
 | 可测试 | 所有业务逻辑放在 `src/core/`，**不引用任何 DOM/BOM 全局**，`node --test` 可以直接 import |
 
@@ -24,8 +24,8 @@
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
                                             │ 同源 JSON API
 ┌───────────────────────────────────────────▼──────────── server（可信服务端）──────────────────┐
-│ /api/generate → deepseek-generator.mjs → DeepSeek Responses API → llm-validator.mjs           │
-│ /api/auth + /api/sync → sync-store.mjs                                                        │
+│ Vercel /api/generate 或本地 Node → deepseek-generator.mjs → DeepSeek → llm-validator.mjs      │
+│ 本地 Node 专属：/api/auth + /api/sync → sync-store.mjs                                        │
 └───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,10 +50,10 @@ prompt → 计划审批 → POST /api/generate
 自动修复只处理“模型已生成代码但未通过校验”的情况。401/403 等认证配置错误立即返回；限流、超时和
 服务端异常保留失败轨迹。任何失败都不创建版本、不覆盖当前 READY 版本。
 
-公网部署时，`generation-guard.mjs` 在调用模型前发放内存令牌：默认每个匿名客户端每小时 5 次、全站
+公网部署时，`generation-guard.mjs` 在调用模型前发放内存令牌：默认每个匿名客户端每小时 5 次、每实例每天
 每天 30 次、最多 2 个并发任务。客户端地址先做 SHA-256 摘要，服务不记录原始 IP。时窗/预算超限返回
 429，并发超限返回 503；响应携带 `Retry-After`，任务在成功、失败或取消后都会释放并发令牌。该方案适合
-单实例面试 Demo；若扩展到多个实例，应把计数器迁移到共享的 Redis/Key Value。
+单实例面试 Demo；Vercel Serverless 横向扩容后该限制是 best effort，不是严格全局预算，生产版应把计数器迁移到共享 Redis/Key Value。
 
 ## 3. 核心数据结构：AppSpec
 

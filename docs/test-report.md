@@ -13,9 +13,9 @@
 
 ```
 $ npm run test:unit
-# tests 79
+# tests 82
 # suites 0
-# pass 79
+# pass 82
 # fail 0
 # cancelled 0
 # skipped 0
@@ -40,9 +40,10 @@ $ npm run test:e2e
 | `test/llm-validator.test.mjs` | 3 | ✅ | 计算器/贪吃蛇契约与危险 API 门禁 |
 | `test/deepseek-generator.test.mjs` | 3 | ✅ | 自动修复、缺 Key、认证失败立即停止 |
 | `test/generation-guard.test.mjs` | 4 | ✅ | 每客户端时窗、全站每日预算、并发令牌、环境配置 |
-| 单元与服务端合计 | **79** | **79 pass / 0 fail** | |
+| `test/vercel-api.test.mjs` | 3 | ✅ | Vercel health、方法门禁、prompt 前置校验 |
+| 单元与服务端合计 | **82** | **82 pass / 0 fail** | |
 | `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome：生成/CRUD/刷新/跨浏览器账号同步/页面错误 |
-| `e2e-live/llm-apps.spec.js` | 2 | ❌ 当前凭证失败 | 真实 DeepSeek：计算器 `7+5=12`、贪吃蛇启动/方向键 |
+| `e2e-live/llm-apps.spec.js` | 2 | ✅ | 真实 DeepSeek：计算器 `7+5=12`、贪吃蛇启动/方向键 |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -135,7 +136,7 @@ $ npm run test:e2e
 - 同一匿名客户端达到小时额度后返回 429，窗口结束后恢复；
 - 并发上限返回 503，任务结束释放令牌，重复释放不会破坏计数；
 - 每日预算跨客户端生效，并在 UTC 次日重置；
-- Render/本地环境变量可调整三类限制，异常值回落到安全默认值。
+- Vercel/本地环境变量可调整三类限制，异常值回落到安全默认值。
 
 ---
 
@@ -232,14 +233,11 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 - `src/ui/*` 没有细粒度单元测试；核心 UI 主链由 E2E 覆盖。
 - 无可访问性专项审计、无跨浏览器兼容性测试。
 
-### 4.4 已执行但未通过：真实 DeepSeek E2E
+### 4.4 已执行并通过：真实 DeepSeek E2E
 
 `npm run test:e2e:llm` 于 2026-09-22 实际启动 Chrome，并分别从自然语言创建计算器和贪吃蛇项目。
-两个用例均正确进入 `DeepSeek LLM` 计划与 `/api/generate`，但 DeepSeek 服务端返回
-`Authentication Fails ... api key ... is invalid`，因此没有生成 v1，最终 **0/2 通过**。
-
-这不是“已通过”的证据。替换为 DeepSeek 官方平台的有效 `DEEPSEEK_API_KEY` 后必须重新执行；测试会在
-生成成功后实际点击计算器 `7 + 5 =` 并断言 `12`，以及启动贪吃蛇、断言状态为 `running` 并发送方向键。
+两个用例都进入 `DeepSeek LLM` 计划与 `/api/generate`，生成 READY v1，最终 **2/2 通过**：计算器实际点击
+`7 + 5 =` 并断言 `12`；贪吃蛇实际启动、断言状态为 `running` 并发送方向键。
 该 live 套件单独运行，会产生真实 API 用量，不包含在 `npm run test:all` 中。
 
 ## 5. 已执行的非单测验证

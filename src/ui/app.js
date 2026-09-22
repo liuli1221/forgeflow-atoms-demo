@@ -477,7 +477,7 @@ async function withSyncBusy(action) {
 
 async function checkSyncHealth() {
   const health = await syncClient.health();
-  syncAvailable = !!health.ok;
+  syncAvailable = !!(health.ok && health.storage === 'server');
   llmAvailable = !!(health.ok && health.llm && health.llm.configured);
   if (ui.agentBadge) ui.agentBadge.textContent = llmAvailable ? `Hybrid Agent · ${health.llm.model}` : 'Local Agent · LLM 未连接';
   ui.btnCloud.textContent = syncAvailable ? '账号同步' : '本地数据';

@@ -300,17 +300,28 @@ WorkBuddy 首轮声称的「Playwright 完整链路」不成立：它尝试下�
 6. 只有校验通过才写 READY 版本；失败或取消保留当前版本；预览额外注入 CSP 禁止联网；
 7. 新增真实 LLM Playwright：计算器必须点击 `7 + 5 =` 得到 `12`，贪吃蛇必须可启动并响应方向键。
 
-本轮真实 LLM 基础改造执行结果：`npm run test:unit` **75/75**，`npm run test:e2e` **2/2**。`npm run test:e2e:llm`
-确实到达 DeepSeek，但当前本地凭证被服务端判定为 invalid，故 **0/2**；这两条不能标记为通过，替换有效 Key 后必须重跑。
+本轮真实 LLM 基础改造最初执行结果：`npm run test:unit` **75/75**，`npm run test:e2e` **2/2**。首次
+`npm run test:e2e:llm` 到达 DeepSeek 但旧凭证无效，因此当时如实记录为 **0/2**。2026-09-22 换用有效 Key
+后重新执行，计算器 `7+5=12` 和贪吃蛇启动/方向键最终 **2/2 通过**。
 
 新的部署边界：GitHub Pages 只能运行静态本地链路，不能承载 `/api/generate`。完整在线 Demo 必须部署 Node 服务并在服务端环境变量中配置 Key。
 
-### 10.1 GitHub + Render 单服务发布准备
+### 10.1 Render 方案评估与放弃
 
 随后按公开 Demo 风险补齐部署层：新增 `render.yaml`，使用一个 Node Web Service 同时承载静态前端和三组 API；
 绑定 `0.0.0.0`、使用 Render 的 `PORT`、配置 `/api/health`、自动生成会话密钥并把 DeepSeek Key 标为
 `sync:false`。新增生成用量保护：每客户端小时额度、全站每日预算、并发上限、429/503 与 `Retry-After`，
 原始 IP 只在内存中参与摘要、不写日志。新增 4 条限流测试后单元/服务端结果为 **79/79**。
 
-账号同步的 JSON 在 Render Free 文件系统上不是持久存储；浏览器 localStorage 的刷新恢复仍有效，但若要承诺
-跨设备长期恢复，需要付费持久化磁盘并设置 `FORGEFLOW_DATA_FILE`。详细步骤记录在 `docs/render-deploy.md`。
+账号同步的 JSON 在 Render Free 文件系统上不是持久存储；浏览器 localStorage 的刷新恢复仍有效。实际创建
+Blueprint 时 Render 要求银行卡身份验证，因此没有把“准备完成”误写成“已部署”，并按用户决定改用 Vercel。
+
+### 10.2 Vercel Serverless 发布改造
+
+Vercel 版本新增 `api/health.mjs`、`api/generate.mjs` 和 `vercel.json`：仓库根目录直接托管静态前端，
+行为型/开放需求调用同域 Serverless Function，Key 只放 Vercel Environment Variables。线上 health 明确返回
+`storage: browser`，因此 UI 不会伪装账号同步可用；本地 `node server.mjs` 仍保留账号/JSON 同步用于工程演示。
+
+新增 3 条 Vercel Function 回归后，实际结果为 **82/82 unit/service/function + 2/2 离线 Chrome E2E +
+2/2 真实 DeepSeek E2E**。实例内限流在 Serverless 多实例环境只是 best effort，正式生产需要共享 Redis/KV；
+完整步骤与验收口径见 `docs/vercel-deploy.md`。
