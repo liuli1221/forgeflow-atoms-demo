@@ -15,6 +15,11 @@ function sendJson(res, status, payload, extraHeaders = {}) {
   res.end(body);
 }
 
+function publicGenerationResult(result) {
+  const { provider: _provider, model: _model, ...payload } = result || {};
+  return payload;
+}
+
 function clientKey(req) {
   const forwarded = String(req.headers['x-forwarded-for'] || '')
     .split(',')
@@ -78,7 +83,7 @@ export default async function handler(req, res) {
         previousArtifact: body.previousArtifact && typeof body.previousArtifact === 'object' ? body.previousArtifact : null,
       }, { signal: controller.signal });
 
-      sendJson(res, result.ok ? 200 : result.cancelled ? 499 : 502, result, {
+      sendJson(res, result.ok ? 200 : result.cancelled ? 499 : 502, publicGenerationResult(result), {
         'x-ratelimit-remaining': String(permit.remaining),
         'x-daily-limit-remaining': String(permit.dailyRemaining),
       });

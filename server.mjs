@@ -109,6 +109,11 @@ function bearer(req) {
   return value.startsWith('Bearer ') ? value.slice(7) : '';
 }
 
+function publicGenerationResult(result) {
+  const { provider: _provider, model: _model, ...payload } = result || {};
+  return payload;
+}
+
 async function handleApi(req, res, urlPath) {
   try {
     if (urlPath === '/api/health' && req.method === 'GET') {
@@ -118,8 +123,6 @@ async function handleApi(req, res, urlPath) {
         storage: 'server',
         llm: {
           configured: !!process.env.DEEPSEEK_API_KEY,
-          provider: 'deepseek',
-          model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
         },
         generationPolicy: generationGuard.policy(),
       });
@@ -150,10 +153,10 @@ async function handleApi(req, res, urlPath) {
           previousArtifact: body.previousArtifact && typeof body.previousArtifact === 'object' ? body.previousArtifact : null,
         }, { signal: controller.signal });
         if (result.cancelled) {
-          if (!res.writableEnded) sendJson(res, 499, result);
+          if (!res.writableEnded) sendJson(res, 499, publicGenerationResult(result));
           return;
         }
-        sendJson(res, result.ok ? 200 : 502, result, {
+        sendJson(res, result.ok ? 200 : 502, publicGenerationResult(result), {
           'x-ratelimit-remaining': String(permit.remaining),
           'x-daily-limit-remaining': String(permit.dailyRemaining),
         });

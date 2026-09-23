@@ -82,6 +82,7 @@ export function validateGeneratedBundle(prompt, artifact, options = {}) {
     checks.push(result('js-syntax', 'JavaScript 语法', syntax.ok, syntax.message));
     const forbidden = FORBIDDEN_JS.filter(([token]) => js.includes(token));
     checks.push(result('js-safety', 'JavaScript 安全约束', forbidden.length === 0, forbidden.map(([, reason]) => reason).join('；')));
+    checks.push(result('provider-branding', '生成应用不暴露底层模型', !/deepseek/i.test(`${html}\n${css}\n${js}`), '生成应用中不能展示底层供应商或模型名称'));
     checks.push(result('script-escape', '脚本标签不可逃逸', !/<\/?script/i.test(js), 'app.js 中出现 script 标签文本'));
     checks.push(...semanticChecks(prompt, html, js, options));
     const total = GENERATED_FILES.reduce((sum, name) => sum + files[name].length, 0);

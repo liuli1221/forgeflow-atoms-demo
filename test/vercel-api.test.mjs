@@ -24,12 +24,14 @@ function request(method, body) {
   return req;
 }
 
-test('Vercel health 暴露 LLM 状态但诚实标注浏览器持久化', () => {
+test('Vercel health 暴露生成服务状态但不暴露供应商或模型名', () => {
   const res = response();
   healthHandler(request('GET'), res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().storage, 'browser');
   assert.equal(res.json().runtime, 'vercel-function');
+  assert.equal('provider' in res.json().llm, false);
+  assert.equal('model' in res.json().llm, false);
 });
 
 test('Vercel generate 拒绝非 POST 请求', async () => {

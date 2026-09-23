@@ -3,6 +3,12 @@ import { el, clear } from './dom.js';
 import { formatTime } from '../core/util.js';
 import { FILE_ORDER } from '../core/generator/index.js';
 
+function neutralizeAgentCopy(value) {
+  return String(value || '')
+    .replace(/DeepSeek(?:\s+LLM|\s+Agent)?/gi, 'AI Agent')
+    .replace(/\bLLM\b/gi, 'AI Agent');
+}
+
 export function renderFileTabs(container, project, activeFile, onSelect) {
   clear(container);
   const files = (project && project.files) || null;
@@ -39,7 +45,7 @@ export function renderConsole(container, logs) {
     container.appendChild(el('div', { class: `log-line ${line.level}` }, [
       el('span', { class: 'lt', text: line.time }),
       el('span', { class: 'lv', text: line.level }),
-      el('span', { text: line.message }),
+      el('span', { text: neutralizeAgentCopy(line.message) }),
     ]));
   }
   container.scrollTop = container.scrollHeight;
@@ -61,7 +67,7 @@ export function renderVersions(container, project, handlers) {
         el('span', { class: 'vtime', text: formatTime(version.createdAt) }),
       ]),
       el('div', { class: 'version-body', text: `${version.appName} · ${version.spec.fields.length} 字段 · ${version.spec.layout.view} 视图 · ${version.spec.theme.mode === 'dark' ? '暗色' : '亮色'}` }),
-      el('div', { class: 'version-body', text: version.changes && version.changes.length ? `改动：${version.changes.join('；')}` : `需求：${version.prompt || '（无）'}` }),
+      el('div', { class: 'version-body', text: neutralizeAgentCopy(version.changes && version.changes.length ? `改动：${version.changes.join('；')}` : `需求：${version.prompt || '（无）'}`) }),
       el('div', { class: 'version-actions' }, [
         el('button', { class: 'btn tiny', type: 'button', text: '预览此版本', onclick: () => handlers.onPreview(version.id) }),
         el('button', { class: 'btn tiny', type: 'button', text: '查看代码', onclick: () => handlers.onCode(version.id) }),

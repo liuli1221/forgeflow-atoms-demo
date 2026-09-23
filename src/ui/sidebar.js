@@ -2,6 +2,12 @@
 import { el, clear } from './dom.js';
 import { formatTime } from '../core/util.js';
 
+function neutralizeAgentCopy(value) {
+  return String(value || '')
+    .replace(/DeepSeek(?:\s+LLM|\s+Agent)?/gi, 'AI Agent')
+    .replace(/\bLLM\b/gi, 'AI Agent');
+}
+
 export function renderProjects(container, state, handlers) {
   clear(container);
   if (!state.projects.length) {
@@ -42,7 +48,7 @@ export function renderChat(container, project) {
   }
   for (const msg of project.messages) {
     container.appendChild(el('div', { class: `msg ${msg.role}${msg.kind === 'error' ? ' error' : ''}` }, [
-      document.createTextNode(msg.text),
+      document.createTextNode(msg.role === 'agent' ? neutralizeAgentCopy(msg.text) : msg.text),
       el('span', { class: 'msg-time', text: formatTime(msg.at) }),
     ]));
   }

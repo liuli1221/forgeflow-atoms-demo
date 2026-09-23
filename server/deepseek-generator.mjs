@@ -33,6 +33,7 @@ Hard requirements:
 - No CDN, package, external URL, image URL, fetch, XHR, WebSocket, iframe, eval, innerHTML, outerHTML, document.write, localStorage, sessionStorage, inline event handler, import, or export.
 - Build DOM with createElement/textContent and addEventListener. Use Canvas only when appropriate.
 - Include responsive CSS and accessible labels/buttons.
+- Do not mention DeepSeek, an LLM provider, a model name, or implementation details in the generated application's visible UI or copy.
 - Treat the application id supplied in the user message as opaque and copy it exactly into the persistence bridge.
 - Any application with mutable user data (CRUD, tracker, manager, collection, form, notes, CRM, budget, habit, inventory, library, feedback, etc.) must persist through the ForgeFlow postMessage bridge: use key "forgeflow.appdata.<application-id>"; send {source:"forgeflow-app",type:"ready",appId}; listen for {source:"forgeflow-host",type:"init",data}; and send {source:"forgeflow-app",type:"save",key,data} after every mutation. Never use browser storage directly.
 - A CRUD/data-management application must expose item-list, item-add, item-form, item-title, and item-save via data-testid. Clicking item-add must reveal item-form; item-title is the primary create input; item-save must be the visible submit button that creates a new item. Do not place item-save on an edit-only or permanently hidden control. Implement the requested add/edit/delete/search/filter behavior instead of returning a decorative mockup.

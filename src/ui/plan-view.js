@@ -3,6 +3,12 @@ import { el, clear } from './dom.js';
 import { formatTime } from '../core/util.js';
 import { RUN_STAGES } from '../core/planner.js';
 
+function neutralizeAgentCopy(value) {
+  return String(value || '')
+    .replace(/DeepSeek(?:\s+LLM|\s+Agent)?/gi, 'AI Agent')
+    .replace(/\bLLM\b/gi, 'AI Agent');
+}
+
 export function renderPlan(container, project, handlers) {
   clear(container);
 
@@ -23,8 +29,8 @@ export function renderPlan(container, project, handlers) {
       el('p', {
         class: 'sub',
         text: project.spec
-          ? `${project.spec.appName} · DeepSeek 应用 · ${project.versions.length} 个版本。继续在左侧输入修改要求即可生成新版本。`
-          : '在左侧输入一句话描述，Agent 会先给出实施计划，你批准后才会调用 DeepSeek 生成代码。',
+          ? `${project.spec.appName} · AI Agent 应用 · ${project.versions.length} 个版本。继续在左侧输入修改要求即可生成新版本。`
+          : '在左侧输入一句话描述，Agent 会先给出实施计划，你批准后才会生成代码。',
       }),
     ]);
     container.appendChild(box);
@@ -42,7 +48,7 @@ export function renderPlan(container, project, handlers) {
     for (const cell of plan.summary) {
       grid.appendChild(el('div', { class: 'plan-cell' }, [
         el('div', { class: 'k', text: cell.label }),
-        el('div', { class: 'v', text: String(cell.value) }),
+        el('div', { class: 'v', text: neutralizeAgentCopy(cell.value) }),
       ]));
     }
     busy.appendChild(grid);
@@ -51,20 +57,20 @@ export function renderPlan(container, project, handlers) {
   }
 
   const box = el('div', { class: 'card-box' });
-  box.appendChild(el('h3', { text: 'DeepSeek 实施计划（待批准）' }));
-  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · 批准后调用 DeepSeek，失败会自动修复且不会覆盖当前版本` }));
+  box.appendChild(el('h3', { text: 'AI Agent 实施计划（待批准）' }));
+  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · 批准后开始生成，失败会自动修复且不会覆盖当前版本` }));
 
   const grid = el('div', { class: 'plan-grid' });
   for (const cell of plan.summary) {
     grid.appendChild(el('div', { class: 'plan-cell' }, [
       el('div', { class: 'k', text: cell.label }),
-      el('div', { class: 'v', text: String(cell.value) }),
+      el('div', { class: 'v', text: neutralizeAgentCopy(cell.value) }),
     ]));
   }
   box.appendChild(grid);
 
   if (plan.changes && plan.changes.length) {
-    box.appendChild(el('div', { class: 'sub', text: '本次改动：' + plan.changes.join('；') }));
+    box.appendChild(el('div', { class: 'sub', text: '本次改动：' + neutralizeAgentCopy(plan.changes.join('；')) }));
   }
 
   const steps = el('div', { class: 'plan-steps' });
@@ -72,8 +78,8 @@ export function renderPlan(container, project, handlers) {
     steps.appendChild(el('div', { class: 'plan-step' }, [
       el('div', { class: 'n', text: String(i + 1) }),
       el('div', null, [
-        el('div', { class: 't', text: step.title }),
-        el('div', { class: 'd', text: step.detail }),
+        el('div', { class: 't', text: neutralizeAgentCopy(step.title) }),
+        el('div', { class: 'd', text: neutralizeAgentCopy(step.detail) }),
       ]),
     ]));
   });
@@ -87,10 +93,10 @@ export function renderPlan(container, project, handlers) {
     ]));
   }
   if (plan.fields && plan.fields.length) box.appendChild(chips);
-  box.appendChild(el('p', { class: 'sub', text: '模型只在批准后调用。生成结果必须通过文件完整性、语法、安全、持久化和应用专项契约检查。' }));
+  box.appendChild(el('p', { class: 'sub', text: '生成任务只在批准后发起。结果必须通过文件完整性、语法、安全、持久化和应用专项契约检查。' }));
 
   if (plan.notes && plan.notes.length) {
-    box.appendChild(el('p', { class: 'sub', text: '备注：' + plan.notes.join(' ') }));
+    box.appendChild(el('p', { class: 'sub', text: '备注：' + neutralizeAgentCopy(plan.notes.join(' ')) }));
   }
 
   box.appendChild(el('div', { class: 'plan-actions' }, [
@@ -139,8 +145,8 @@ export function renderTrace(container, project, handlers) {
     list.appendChild(el('div', { class: `trace-item ${evt.status}` }, [
       el('div', { class: 'ico' }, [icon]),
       el('div', null, [
-        el('div', { class: 'tl', text: evt.label }),
-        evt.detail ? el('div', { class: 'td', text: evt.detail }) : null,
+        el('div', { class: 'tl', text: neutralizeAgentCopy(evt.label) }),
+        evt.detail ? el('div', { class: 'td', text: neutralizeAgentCopy(evt.detail) }) : null,
       ]),
       el('div', { class: 'tt', text: formatTime(evt.at) }),
     ]));

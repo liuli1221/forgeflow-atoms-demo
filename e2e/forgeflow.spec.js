@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeArtifactFixture } from '../test/fixtures/llm-artifacts.mjs';
 
-test('普通任务需求 → DeepSeek API → CRUD → 刷新 → 账号跨浏览器同步', async ({ page, browser }) => {
+test('普通任务需求 → AI 生成 API → CRUD → 刷新 → 账号跨浏览器同步', async ({ page, browser }) => {
   const username = `e2e_${Date.now()}`;
   const password = 'E2e-pass-1234';
   let generationRequest = null;
@@ -14,14 +14,12 @@ test('普通任务需求 → DeepSeek API → CRUD → 刷新 → 账号跨浏�
       contentType: 'application/json',
       body: JSON.stringify({
         ok: true,
-        provider: 'deepseek',
-        model: 'deepseek-e2e-fixture',
         artifact,
         spec: {
           specVersion: 1,
           appId: generationRequest.appId,
           appName: '面试任务管理器',
-          tagline: '由 DeepSeek 测试替身生成',
+          tagline: '由 AI Agent 测试替身生成',
           domain: 'custom',
           entityName: '任务',
           theme: { mode: 'light', accent: '#4f6bed' },
@@ -31,7 +29,7 @@ test('普通任务需求 → DeepSeek API → CRUD → 刷新 → 账号跨浏�
           metrics: [],
           seedItems: [],
           sourcePrompt: generationRequest.prompt,
-          engine: 'deepseek',
+          engine: 'ai-agent',
           appType: 'crud',
           acceptanceCriteria: ['可以新增并持久化任务'],
         },
@@ -50,7 +48,8 @@ test('普通任务需求 → DeepSeek API → CRUD → 刷新 → 账号跨浏�
   );
   await page.getByRole('button', { name: '发送给 Agent' }).click();
 
-  await expect(page.getByText('DeepSeek LLM', { exact: true })).toBeVisible();
+  await expect(page.locator('#plan-panel').getByText('AI Agent', { exact: true })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText(/DeepSeek/i);
   await page.getByRole('button', { name: '批准并执行' }).click();
   await expect(page.getByText(/v1 已保存/)).toBeVisible({ timeout: 10_000 });
   expect(generationRequest.prompt).toContain('任务管理器');

@@ -1,7 +1,7 @@
 /**
  * ForgeFlow builder controller.
  *
- * Wires the DeepSeek generation client plus deterministic validation/version/
+ * Wires the AI generation client plus deterministic validation/version/
  * storage guards to the DOM. All state transitions go through the store so
  * they are persisted to localStorage and survive a refresh.
  */
@@ -118,8 +118,8 @@ function render() {
   ui.composerHint.textContent = busy
     ? 'Agent 正在执行，请稍候或点击「取消运行」。'
     : p && p.spec
-      ? '继续描述功能修改，DeepSeek 会基于当前完整代码生成新版本。'
-      : '描述任意小应用；所有创建与修改都使用真实 DeepSeek LLM。';
+      ? '继续描述功能修改，AI Agent 会基于当前完整代码生成新版本。'
+      : '描述任意小应用；所有创建与修改都走统一的 AI Agent。';
 
   syncPreview();
 }
@@ -220,7 +220,7 @@ async function submitPrompt(text) {
     proj.pendingPrompt = prompt;
     proj.pendingMode = result.mode;
     proj.pendingChanges = result.changes;
-    proj.pendingEngine = 'deepseek';
+    proj.pendingEngine = 'ai-agent';
     proj.lastPrompt = prompt;
     proj.analysis = result.analysis;
     proj.status = 'awaiting_approval';
@@ -307,7 +307,7 @@ async function approvePlan() {
   }, { immediate: true });
 
   const changed = result.version.changes.length ? `（${result.version.changes.join('；')}）` : '';
-  pushMessage('agent', `${result.version.label} 已保存${changed}。这是由 ${result.model || 'DeepSeek'} 真实生成并通过确定性校验的应用，可继续输入修改要求。`);
+  pushMessage('agent', `${result.version.label} 已保存${changed}。应用已通过确定性校验，可继续输入修改要求。`);
   toast(`${result.version.label} 保存成功`, 'ok');
   log('info', `版本保存：${result.version.label}`);
   previewVersionId = null;
@@ -465,7 +465,7 @@ async function checkSyncHealth() {
   const health = await syncClient.health();
   syncAvailable = !!(health.ok && health.storage === 'server');
   llmAvailable = !!(health.ok && health.llm && health.llm.configured);
-  if (ui.agentBadge) ui.agentBadge.textContent = llmAvailable ? `DeepSeek Agent · ${health.llm.model}` : 'DeepSeek Agent · LLM 未连接';
+  if (ui.agentBadge) ui.agentBadge.textContent = llmAvailable ? 'AI Agent · 服务可用' : 'AI Agent · 服务未连接';
   ui.btnCloud.textContent = syncAvailable ? '账号同步' : '本地数据';
   renderSyncState();
 }
@@ -733,7 +733,7 @@ function init() {
   else ui.welcome.hidden = false;
 
   render();
-  log('info', 'ForgeFlow 就绪 · DeepSeek 统一生成 + 确定性工程护栏');
+  log('info', 'ForgeFlow 就绪 · AI Agent 统一生成 + 确定性工程护栏');
 }
 
 init();

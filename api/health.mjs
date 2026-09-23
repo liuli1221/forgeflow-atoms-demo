@@ -20,8 +20,6 @@ export default function handler(req, res) {
     storage: 'browser',
     llm: {
       configured: Boolean(process.env.DEEPSEEK_API_KEY),
-      provider: 'deepseek',
-      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
     },
     generationPolicy: generationGuardFromEnv(process.env).policy(),
   }));
