@@ -187,7 +187,13 @@ atomlite-workbuddy/
 ---
 
 ## 8. 已知限制
+
+- 所有新建和修改都会消耗 DeepSeek API；没有离线生成入口。预置项目仍可离线体验，但不代表新的提示词由本地模板生成。
+- LLM 产物被限制为三个无外部依赖的单页文件，禁止自行联网、动态执行代码和直接访问浏览器存储。
+- `.env.local` 只适合本机；部署时必须用托管平台的服务端环境变量，不能把 Key 放进前端或 Git。
+- 版本历史上限 30 条，超出后滚动淘汰最早的版本。
 - 「下载全部」是逐个文件下载（不打包 zip），因为不引入任何依赖。
+- 预览 iframe 没有 `allow-same-origin`，因此生成应用在预览中通过 postMessage 持久化；单独下载后独立打开时自动改用自己的 `localStorage`。
 - Vercel Serverless 不运行单机 JSON 账号同步；线上持久化依赖浏览器 `localStorage`。若要跨设备恢复，应接入数据库后再开放账号能力。
 - 当前公网限流是实例内存级 best effort；Vercel 横向扩容后不是严格的全局日预算，生产版应接入共享 Redis/KV。
 - E2E 当前固定验证本机 Chrome；尚未覆盖 Firefox、WebKit 和真实移动设备。
