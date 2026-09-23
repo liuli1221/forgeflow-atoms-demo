@@ -1,6 +1,6 @@
 # 测试报告
 
-- 项目：ForgeFlow（`w/atomlite-workbuddy`）
+- 项目：ForgeFlow
 - 更新日期：2026-09-23
 - 环境：macOS (darwin-arm64) · Node v26.0.0 · Chrome
 - 命令：`npm run test:unit` / `npm run test:e2e` / `npm run test:e2e:llm`

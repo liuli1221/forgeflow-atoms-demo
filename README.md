@@ -104,7 +104,7 @@ parser / blueprints / generator 等原确定性生成模块仅保留给预置演
 ## 5. 目录
 
 ```
-atomlite-workbuddy/
+forgeflow-atoms-demo/
 ├── index.html                  # Builder 外壳（欢迎页 + 三栏工作台）
 ├── api/                        # Vercel Functions：health + generate
 ├── server.mjs                  # 本地 Node 静态服务 + generate/auth/sync API
