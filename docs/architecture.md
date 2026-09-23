@@ -5,7 +5,7 @@
 | 约束 | 决策 |
 |------|------|
 | Key 不能进入浏览器 | DeepSeek Key 只由 Node 服务从 `.env.local` / 部署环境变量读取，浏览器只请求同源 `/api/generate` |
-| 不能把游戏降级为 CRUD | 已知 CRUD 走确定性本地 Agent；计算器、贪吃蛇与开放式应用强制走真实 LLM，失败时明确报错 |
+| 不能让规则模板与 LLM 竞争 | 所有用户创建/修改统一走 DeepSeek；失败时明确报错，不回退成 generic CRUD 或本地模板 |
 | 不能依赖 CDN / npm | 原生 HTML + CSS + ES Modules；`package.json` 无 `dependencies`；本地服务和 Vercel Functions 都只用 Node 内置能力 |
 | 可直接部署 GitHub Pages | 纯静态、全相对路径、无构建步骤 |
 | 可测试 | 所有业务逻辑放在 `src/core/`，**不引用任何 DOM/BOM 全局**，`node --test` 可以直接 import |
@@ -29,36 +29,43 @@
 └───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-依赖方向是单向的：`ui → core`。core 内部也保持单向：
-`blueprints → parser/mutator → planner → agent → generator → validator → versions → storage`；
-Node 服务模式额外提供 `llm-client → /api/generate → deepseek-generator` 和
+依赖方向是单向的：`ui → core → server API`。用户请求主链为
+`llm-plan → llm-agent → llm-client → /api/generate → deepseek-generator → llm-validator → versions → storage`。
+`parser / mutator / blueprints / generator / validator` 是预置演示、历史兼容和纯函数回归使用的确定性模块，
+不再参与用户提示词的生成路由。Node 服务模式还提供
 `sync-client → /api/auth + /api/sync → sync-store`。
 
-## 2.1 Hybrid Agent 路由与自动修复
+## 2.1 统一 DeepSeek 入口与确定性护栏
 
-`shouldUseLlm()` 根据行为型需求（计算器、游戏、计时器、画板等）、本地解析 fallback，以及项目原有
-`spec.engine === 'deepseek'` 决定路径。命中 LLM 后不会再调用 generic CRUD。
+`src/ui/app.js` 对所有创建与修改都调用 `prepareLlmRequest()`，批准后只执行 `executeLlmRun()`。
+代码中不再存在 `shouldUseLlm()` 或本地执行分支；任务管理、记账、计算器、贪吃蛇和未知领域使用同一入口。
 
 ```text
 prompt → 计划审批 → POST /api/generate
-                    → DeepSeek JSON Schema 输出三个文件
-                    → llm-validator（结构/语法/安全/专项契约）
+                    → DeepSeek 输出三个文件 JSON
+                    → JSON 提取（原文 / 去代码围栏 / 首尾大括号）
+                    → llm-validator（结构/语法/安全/交互/持久化契约）
                     ├─ pass → READY 版本 → sandbox
-                    └─ fail → 错误 + 上一版 bundle 回送模型（最多 2 次）
+                    └─ fail → 错误 + 上一版 bundle 或无效原文回送模型（最多 2 次）
 ```
 
-自动修复只处理“模型已生成代码但未通过校验”的情况。401/403 等认证配置错误立即返回；限流、超时和
-服务端异常保留失败轨迹。任何失败都不创建版本、不覆盖当前 READY 版本。
+自动修复同时处理“代码未通过契约”和“响应不是合法 JSON”。401/403 等认证配置错误立即返回；每次模型调用
+默认 60 秒超时，限流、超时和服务端异常保留失败轨迹。任何失败都不创建版本、不覆盖当前 READY 版本。
+
+对于数据类应用，护栏强制要求 `item-list/item-add/item-form/item-title/item-save` 稳定测试标识、关键创建控件
+不能静态隐藏，并且必须实现带精确 `appId` 的 ForgeFlow postMessage 持久化协议。护栏限定结果的可用性与安全
+边界，但不替模型决定领域、字段、页面结构或视觉方案。
 
 公网部署时，`generation-guard.mjs` 在调用模型前发放内存令牌：默认每个匿名客户端每小时 5 次、每实例每天
 每天 30 次、最多 2 个并发任务。客户端地址先做 SHA-256 摘要，服务不记录原始 IP。时窗/预算超限返回
 429，并发超限返回 503；响应携带 `Retry-After`，任务在成功、失败或取消后都会释放并发令牌。该方案适合
 单实例面试 Demo；Vercel Serverless 横向扩容后该限制是 best effort，不是严格全局预算，生产版应把计数器迁移到共享 Redis/Key Value。
 
-## 3. 核心数据结构：AppSpec
+## 3. 核心数据结构：运行元数据 AppSpec
 
-AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用户原始文本用于代码生成——
-`sourcePrompt` 只作为数据被 `JSON.stringify` 内联，用于展示和追溯。
+当前 DeepSeek 主链把 AppSpec 用作项目身份、版本和持久化元数据；真正的应用结构与行为由模型生成的三文件源码
+表达。`appId` 在修改时保持不变，从而让新版本继续读取同一业务数据命名空间。下面的丰富字段仍由预置演示与
+历史确定性模块使用，不再作为用户请求的本地生成入口。
 
 ```jsonc
 {
@@ -91,9 +98,9 @@ AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用�
 `select` 必须有 `options`、`filters/metrics` 引用的字段必须存在、`percent` 必须带 `where`、
 `delta` 必须同时有 `plusWhere/minusWhere`。校验**永不抛异常**，只返回 `{ok, errors, warnings}`。
 
-## 4. 自然语言解析（parser.js）
+## 4. 历史确定性解析（parser.js，仅预置/回归）
 
-不是「换个标题」，而是四步真实分析：
+该模块不再接收 UI 的新建/修改请求，保留用于预置应用、向后兼容和纯函数测试。它按以下四步分析：
 
 1. **领域打分**：`DOMAIN_KEYWORDS` 八张关键词表逐个统计命中，按 `max(2, 关键词长度)` 加权求和，取最高分；
    全部为 0 时落 `generic` 并置 `analysis.fallback = true`。
@@ -112,7 +119,7 @@ AppSpec 是**唯一的契约**。解析器之后，没有任何模块再读用�
 select / number / date / checkbox，并从括号中提取下拉选项。未知领域只要给出至少两个字段就进入
 `custom`，不会套用 generic 的固定字段；只有既未命中领域、又没有显式 Schema 时才兜底 generic。
 
-## 5. 增量修改（mutator.js）
+## 5. 历史确定性修改（mutator.js，仅兼容/回归）
 
 `applyModification(spec, instruction)` 返回 `{ok, spec, changes, notes}`，**输入对象不可变**。
 识别 8 类操作：改名、明暗主题、主题色、视图、模块开关、已知可选字段增删、自定义字段、下拉新增选项。
@@ -121,7 +128,10 @@ select / number / date / checkbox，并从括号中提取下拉选项。未知�
 任何字段变更后都会重跑 `rebuildFilters / rebuildMetrics / syncSeedItems`，保证 spec 始终自洽。
 **一个都没识别出来时返回 `ok:false` 并原样返回旧 spec**——降级而不是乱改。
 
-## 6. 状态机（agent.js）
+## 6. 执行状态机
+
+当前用户主链由 `llm-agent.js` 驱动：分析 → 计划 → DeepSeek 生成 → 确定性校验/自动修复 → 保存 → READY。
+下面的 `agent.js` 状态机只服务预置演示与历史回归：
 
 ```
 idle ──prepareRequest()──▶ awaiting_approval ──approve()──▶ running ──┬─▶ ready
@@ -138,7 +148,10 @@ idle ──prepareRequest()──▶ awaiting_approval ──approve()──▶ 
 - **只有 validate 全部通过才创建 READY 版本**；失败时 `version = null`，
   控制器不会覆盖 `project.spec / project.files`，当前版本原封不动。
 
-## 7. 代码生成（generator/）
+## 7. 历史确定性生成器（generator/）
+
+`generator/` 用于预置演示和回归，不会根据用户的新提示词生成应用。DeepSeek 主链的源码由
+`server/deepseek-generator.mjs` 返回，再由 `server/llm-validator.mjs` 校验。
 
 | 文件 | 产出 |
 |------|------|
@@ -154,7 +167,7 @@ idle ──prepareRequest()──▶ awaiting_approval ──approve()──▶ 
   完全不使用 `innerHTML`、`eval`、`new Function`、`document.write`；`validator.js` 会把这条当作硬性检查。
 - 预览文档只允许出现 **1 个 `<script>` 标签**，也是一条校验项。
 
-## 8. 校验（validator.js）
+## 8. 确定性校验护栏
 
 15 项确定性检查：AppSpec schema、三个文件存在且非空、doctype/结束标签、挂载点、viewport（warn）、
 script 标签数量、CSS 主题变量、CSS 断点（warn）、`[hidden]` 强制隐藏门禁、`app.js` 语法（用 `new Function(source)` 只解析不执行）、
@@ -162,10 +175,11 @@ script 标签数量、CSS 主题变量、CSS 断点（warn）、`[hidden]` 强�
 
 任何一项 `fail` → 整个 run 失败。`warn` 不阻断。
 
-LLM 路径另由 `server/llm-validator.mjs` 校验：文件只能是 `index.html/styles.css/app.js`，HTML 只能引用这
+DeepSeek 主链由 `server/llm-validator.mjs` 校验：文件只能是 `index.html/styles.css/app.js`，HTML 只能引用这
 两个本地资源，JS 必须通过语法检查，并禁止 `innerHTML/eval/fetch/WebSocket/localStorage` 等危险或越界
 能力。计算器必须暴露可执行 `7 + 5 = 12` 的稳定测试标识；贪吃蛇必须有 Canvas、分数、启动状态、方向键
-处理和游戏循环。预览组装时再注入 CSP，禁止生成页面主动联网。
+处理和游戏循环；数据应用必须暴露稳定 CRUD 测试标识并实现精确 appId 的 postMessage 持久化桥。
+预览组装时再注入 CSP，禁止生成页面主动联网。
 
 ## 9. 预览与数据持久化
 
@@ -173,9 +187,9 @@ LLM 路径另由 `server/llm-validator.mjs` 校验：文件只能是 `index.html
 ┌── Builder（正常同源页面）───────────────────────────────┐
 │ preview-bridge.js                                       │
 │   ├─ 收到 {source:'forgeflow-app', type:'ready'}        │
-│   │     → 读 localStorage['forgeflow.appdata.<appId>']  │
+│   │     → 校验 appId 精确匹配当前项目后读取对应数据      │
 │   │     → post {source:'forgeflow-host', type:'init'}   │
-│   ├─ 收到 type:'save' → 校验 key 前缀后写入 localStorage │
+│   ├─ 收到 type:'save' → 校验 key 必须精确匹配当前 appId 后写入 localStorage │
 │   └─ 收到 type:'log'  → 打到 Console 面板               │
 └───────────────┬─────────────────────────────────────────┘
                 │ postMessage

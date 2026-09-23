@@ -33,3 +33,18 @@ test('真实 DeepSeek 生成贪吃蛇并可启动和响应方向键', async ({ p
   await page.keyboard.press('ArrowRight');
   await expect(preview.getByTestId('snake-canvas')).toBeVisible();
 });
+
+test('真实 DeepSeek 生成任务管理器并在刷新后恢复数据', async ({ page }) => {
+  const preview = await createProject(page, '做一个面试任务管理器，支持新增、编辑、删除、搜索、优先级和分类筛选');
+  await expect(preview.getByTestId('item-list')).toHaveCount(1);
+  await expect(preview.getByTestId('item-add')).toBeVisible();
+  await preview.getByTestId('item-add').click();
+  await preview.getByTestId('item-title').fill('复习 Agent 工程护栏');
+  await expect(preview.getByTestId('item-save')).toBeVisible();
+  await preview.getByTestId('item-save').click();
+  await expect(preview.getByText('复习 Agent 工程护栏', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator('#workbench')).toBeVisible();
+  await expect(page.frameLocator('#preview-frame').getByText('复习 Agent 工程护栏', { exact: true })).toBeVisible();
+});

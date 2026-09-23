@@ -1,7 +1,5 @@
 import { uid, nowIso } from './util.js';
 
-const BEHAVIORAL_APP = /计算器|贪吃蛇|俄罗斯方块|扫雷|游戏|番茄钟|倒计时|计时器|秒表|画板|白板|播放器|转换器|抽奖|问答|答题|测验|calculator|snake|timer|game|canvas|quiz/i;
-
 function inferName(prompt) {
   const text = String(prompt || 'AI 生成应用').trim();
   if (/计算器|calculator/i.test(text)) return '智能计算器';
@@ -12,16 +10,10 @@ function inferName(prompt) {
     .slice(0, 40) || 'AI 生成应用';
 }
 
-export function shouldUseLlm(project, prompt, localResult) {
-  if (project && project.spec && project.spec.engine === 'deepseek') return true;
-  if (BEHAVIORAL_APP.test(String(prompt || ''))) return true;
-  return !!(localResult && localResult.analysis && localResult.analysis.fallback);
-}
-
 export function prepareLlmRequest(project, prompt, options = {}) {
   const previous = project && project.spec;
   const mode = previous ? 'modify' : 'create';
-  const appName = previous && previous.engine === 'deepseek' ? previous.appName : inferName(prompt);
+  const appName = previous && previous.appName ? previous.appName : inferName(prompt);
   const spec = {
     specVersion: 1,
     appId: previous && previous.appId ? previous.appId : uid('app'),
@@ -53,7 +45,7 @@ export function prepareLlmRequest(project, prompt, options = {}) {
     ],
     modules: ['真实 LLM', '代码生成', '安全校验', '自动修复', 'sandbox 预览'],
     steps: [
-      { key: 'analyze', title: '理解开放式应用需求', detail: '识别交互行为，不把游戏或工具降级为 CRUD' },
+      { key: 'analyze', title: '理解应用需求', detail: '由 DeepSeek 统一理解领域、数据结构与交互行为' },
       { key: 'generate', title: '调用 DeepSeek 生成完整源码', detail: '输出三个无外部依赖的浏览器文件' },
       { key: 'validate', title: '执行确定性校验', detail: 'HTML 结构、JavaScript 语法、安全约束与应用专项契约' },
       { key: 'repair', title: '失败时自动修复', detail: '将校验错误和上一版代码反馈给模型，最多修复 2 次' },
@@ -73,7 +65,7 @@ export function prepareLlmRequest(project, prompt, options = {}) {
     plan,
     analysis: { confidence: 1, fallback: false, engine: 'deepseek', notes: plan.notes },
     changes: plan.changes,
-    messages: ['该需求将由真实 DeepSeek LLM 生成代码，不使用 generic CRUD 兜底。'],
+    messages: ['所有自然语言创建与修改统一由真实 DeepSeek LLM 生成；确定性代码只负责校验、安全、版本与持久化。'],
     error: '',
   };
 }

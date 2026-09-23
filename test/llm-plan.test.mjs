@@ -1,14 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProject } from '../src/core/storage.js';
-import { prepareRequest } from '../src/core/agent.js';
-import { prepareLlmRequest, shouldUseLlm } from '../src/core/llm-plan.js';
+import { prepareLlmRequest } from '../src/core/llm-plan.js';
 
-test('计算器和贪吃蛇必须走真实 LLM，不允许 generic CRUD', () => {
+test('计算器、贪吃蛇和任务 CRUD 都统一生成 DeepSeek 计划', () => {
   const project = createProject('新项目');
-  for (const prompt of ['生成一个计算器', '做一个支持键盘的贪吃蛇游戏']) {
-    const local = prepareRequest(project, prompt);
-    assert.equal(shouldUseLlm(project, prompt, local), true);
+  for (const prompt of ['生成一个计算器', '做一个支持键盘的贪吃蛇游戏', '做一个任务管理器，支持优先级和分类筛选']) {
     const result = prepareLlmRequest(project, prompt, { available: true });
     assert.equal(result.engine, 'deepseek');
     assert.equal(result.spec.engine, 'deepseek');
@@ -16,9 +13,12 @@ test('计算器和贪吃蛇必须走真实 LLM，不允许 generic CRUD', () => 
   }
 });
 
-test('已命中的任务 CRUD 保留确定性本地路径', () => {
-  const project = createProject('新项目');
-  const prompt = '做一个任务管理器，支持优先级和分类筛选';
-  const local = prepareRequest(project, prompt);
-  assert.equal(shouldUseLlm(project, prompt, local), false);
+test('已有本地演示项目的修改也切到 DeepSeek，并保留 appId 与应用名', () => {
+  const project = createProject('面试准备计划器');
+  project.spec = { appId: 'app_seed', appName: '面试准备计划器', engine: 'local' };
+  const result = prepareLlmRequest(project, '增加负责人字段', { available: true });
+  assert.equal(result.engine, 'deepseek');
+  assert.equal(result.mode, 'modify');
+  assert.equal(result.spec.appId, 'app_seed');
+  assert.equal(result.spec.appName, '面试准备计划器');
 });

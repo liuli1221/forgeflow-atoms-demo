@@ -151,7 +151,7 @@ export function buildExportPayload(project, appData) {
     kind: EXPORT_KIND,
     version: EXPORT_VERSION,
     exportedAt: nowIso(),
-    generator: 'ForgeFlow Local Agent',
+    generator: 'ForgeFlow DeepSeek Agent',
     project: clone(project),
     appData: clone(appData || {}),
   };

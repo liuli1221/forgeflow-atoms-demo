@@ -33,9 +33,12 @@ Hard requirements:
 - No CDN, package, external URL, image URL, fetch, XHR, WebSocket, iframe, eval, innerHTML, outerHTML, document.write, localStorage, sessionStorage, inline event handler, import, or export.
 - Build DOM with createElement/textContent and addEventListener. Use Canvas only when appropriate.
 - Include responsive CSS and accessible labels/buttons.
+- Treat the application id supplied in the user message as opaque and copy it exactly into the persistence bridge.
+- Any application with mutable user data (CRUD, tracker, manager, collection, form, notes, CRM, budget, habit, inventory, library, feedback, etc.) must persist through the ForgeFlow postMessage bridge: use key "forgeflow.appdata.<application-id>"; send {source:"forgeflow-app",type:"ready",appId}; listen for {source:"forgeflow-host",type:"init",data}; and send {source:"forgeflow-app",type:"save",key,data} after every mutation. Never use browser storage directly.
+- A CRUD/data-management application must expose item-list, item-add, item-form, item-title, and item-save via data-testid. Clicking item-add must reveal item-form; item-title is the primary create input; item-save must be the visible submit button that creates a new item. Do not place item-save on an edit-only or permanently hidden control. Implement the requested add/edit/delete/search/filter behavior instead of returning a decorative mockup.
 - A calculator must expose: calculator-display, key-7, key-add, key-5, key-equals, key-clear via data-testid and support 7 + 5 = 12.
 - A snake game must expose: snake-canvas, snake-score, snake-start, snake-status via data-testid; the start button must set snake-status text exactly to "running"; support arrow keys, score, collision/game-over, and restart.
-- Keep all code self-contained and production-readable.`;
+- Keep all code self-contained and production-readable. Keep the complete JSON response under 18000 characters so it is not truncated.`;
 
 function extractOutputText(payload) {
   const parts = [];
@@ -58,8 +61,26 @@ function compactUsage(usage) {
   };
 }
 
+function parseArtifactText(text) {
+  const candidates = [String(text || '').trim()];
+  const unfenced = candidates[0]
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (unfenced && unfenced !== candidates[0]) candidates.push(unfenced);
+  const firstBrace = unfenced.indexOf('{');
+  const lastBrace = unfenced.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(unfenced.slice(firstBrace, lastBrace + 1));
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch { /* try next deterministic extraction */ }
+  }
+  throw Object.assign(new Error(`DeepSeek 返回内容不是合法 JSON（${String(text || '').length} 字符）。`), {
+    rawText: String(text || '').slice(0, 200_000),
+  });
+}
+
 function makeSpec(prompt, artifact, options) {
-  const appId = options.appId || `app_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  const appId = options.appId;
   return {
     specVersion: 1,
     appId,
@@ -81,7 +102,7 @@ function makeSpec(prompt, artifact, options) {
 }
 
 function promptForAttempt(input, previous, errors, attempt) {
-  const base = `User request:\n${input.prompt}\n\nThis is a ${input.mode || 'create'} request. Build a real working application, not a description.`;
+  const base = `User request:\n${input.prompt}\n\nApplication id (copy exactly for the ForgeFlow persistence bridge): ${input.appId}\n\nThis is a ${input.mode || 'create'} request. Build a real working application, not a description.`;
   if (!previous) return base;
   if (attempt === 1 && errors.length === 0) {
     return `${base}\n\nModify the following existing application to satisfy the user request. Preserve working behavior that the request does not change.\n\nExisting JSON bundle:\n${JSON.stringify(previous)}\n\nReturn the complete updated JSON bundle.`;
@@ -121,8 +142,7 @@ async function callDeepSeek(input, config, previous, errors, attempt) {
     }
     const text = extractOutputText(payload);
     if (!text) throw new Error('DeepSeek 返回了空内容。');
-    let artifact;
-    try { artifact = JSON.parse(text); } catch { throw new Error('DeepSeek 返回内容不是合法 JSON。'); }
+    const artifact = parseArtifactText(text);
     return { artifact, responseId: payload.id || '', usage: compactUsage(payload.usage) };
   } finally {
     clearTimeout(timeout);
@@ -138,21 +158,27 @@ export async function generateWithDeepSeek(input, options = {}) {
     baseUrl: options.baseUrl || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
     model: options.model || process.env.DEEPSEEK_MODEL || 'deepseek-flash',
     fetch: options.fetch || globalThis.fetch,
-    timeoutMs: Number(options.timeoutMs || process.env.DEEPSEEK_TIMEOUT_MS || 120_000),
+    timeoutMs: Number(options.timeoutMs || process.env.DEEPSEEK_TIMEOUT_MS || 60_000),
     signal: options.signal,
   };
   if (typeof config.fetch !== 'function') return { ok: false, error: '当前 Node 运行时不支持 fetch。', attempts: [] };
 
+  const requestedAppId = String(input && input.appId || '').trim();
+  const appId = /^[A-Za-z0-9_-]{1,80}$/.test(requestedAppId)
+    ? requestedAppId
+    : `app_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  const request = { ...input, appId };
+
   const attempts = [];
-  let previous = input.previousArtifact || null;
+  let previous = request.previousArtifact || null;
   let errors = [];
   let lastError = '';
   const maxAttempts = Math.min(3, Math.max(1, Number(options.maxAttempts || 3)));
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const generated = await callDeepSeek(input, config, previous, errors, attempt);
-      const report = validateGeneratedBundle(input.prompt, generated.artifact);
+      const generated = await callDeepSeek(request, config, previous, errors, attempt);
+      const report = validateGeneratedBundle(request.prompt, generated.artifact, { appId });
       attempts.push({ attempt, ok: report.ok, errors: report.errors, responseId: generated.responseId, usage: generated.usage });
       if (report.ok) {
         return {
@@ -160,7 +186,7 @@ export async function generateWithDeepSeek(input, options = {}) {
           provider: 'deepseek',
           model: config.model,
           artifact: generated.artifact,
-          spec: makeSpec(input.prompt, generated.artifact, input),
+          spec: makeSpec(request.prompt, generated.artifact, request),
           files: generated.artifact.files,
           checks: report.checks,
           attempts,
@@ -177,6 +203,7 @@ export async function generateWithDeepSeek(input, options = {}) {
       if (error && [400, 401, 403, 404].includes(error.status)) {
         return { ok: false, error: lastError, attempts };
       }
+      if (error && error.rawText) previous = { invalidJsonOutput: error.rawText };
       errors = [lastError];
     }
   }

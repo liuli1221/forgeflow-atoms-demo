@@ -25,3 +25,24 @@ test('危险 API 与伪装成 CRUD 的计算器会被拦截', () => {
   assert.match(report.errors.join('\n'), /计算器交互契约/);
   assert.match(report.errors.join('\n'), /JavaScript 安全约束/);
 });
+
+test('任务管理应用必须具备标准交互和 ForgeFlow 持久化桥', () => {
+  const appId = 'app_crud_contract';
+  const good = artifact('crud', { appId });
+  const report = validateGeneratedBundle('做一个任务管理器，支持增删改查和搜索', good, { appId });
+  assert.equal(report.ok, true, report.errors.join('\n'));
+  assert.ok(report.checks.some((item) => item.id === 'crud-contract' && item.status === 'pass'));
+  assert.ok(report.checks.some((item) => item.id === 'persistence-bridge' && item.status === 'pass'));
+
+  const bad = artifact('crud', { appId });
+  bad.files['app.js'] = bad.files['app.js'].replace(`forgeflow.appdata.`, 'wrong-prefix.');
+  const rejected = validateGeneratedBundle('做一个任务管理器', bad, { appId });
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.errors.join('\n'), /业务数据持久化契约/);
+
+  const hiddenSave = artifact('crud', { appId });
+  hiddenSave.files['index.html'] = hiddenSave.files['index.html'].replace('data-testid="item-save"', 'data-testid="item-save" class="hidden"');
+  const hiddenReport = validateGeneratedBundle('做一个任务管理器', hiddenSave, { appId });
+  assert.equal(hiddenReport.ok, false);
+  assert.match(hiddenReport.errors.join('\n'), /关键控件不能静态隐藏: item-save/);
+});

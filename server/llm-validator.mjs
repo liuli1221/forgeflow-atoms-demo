@@ -20,7 +20,16 @@ function result(id, label, ok, detail = '', level = 'fail') {
   return { id, label, status: ok ? 'pass' : level, detail: ok ? '' : detail };
 }
 
-function semanticChecks(prompt, html, js) {
+function testIdTag(html, id) {
+  const tags = String(html || '').match(/<[^>]+>/g) || [];
+  return tags.find((tag) => new RegExp(`data-testid=["']${id}["']`, 'i').test(tag)) || '';
+}
+
+function tagIsStaticallyHidden(tag) {
+  return /\shidden(?:\s|=|>)/i.test(tag) || /class=["'][^"']*\bhidden\b[^"']*["']/i.test(tag);
+}
+
+function semanticChecks(prompt, html, js, options = {}) {
   const checks = [];
   const text = String(prompt || '').toLowerCase();
   const combined = `${html}\n${js}`;
@@ -37,10 +46,21 @@ function semanticChecks(prompt, html, js) {
     checks.push(result('snake-loop', '贪吃蛇游戏循环', /requestAnimationFrame|setInterval|setTimeout/.test(js), '缺少游戏循环'));
     checks.push(result('snake-running-state', '贪吃蛇启动状态', /["']running["']/.test(js), '开始后必须把 snake-status 更新为 running'));
   }
+  if (/任务|清单|管理|记录|档案|记账|预算|习惯|库存|客户|图书|反馈|表单|todo|tracker|manager|crm|budget|habit|inventory|library|feedback|form/.test(text)) {
+    const required = ['item-list', 'item-add', 'item-form', 'item-title', 'item-save'];
+    const missing = required.filter((id) => !combined.includes(`data-testid="${id}"`) && !combined.includes(`data-testid='${id}'`));
+    checks.push(result('crud-contract', '数据应用交互契约', missing.length === 0, `缺少测试标识: ${missing.join(', ')}`));
+    const hiddenControls = ['item-add', 'item-title', 'item-save'].filter((id) => tagIsStaticallyHidden(testIdTag(html, id)));
+    checks.push(result('crud-visible-controls', '数据应用关键控件可见性', hiddenControls.length === 0, `关键控件不能静态隐藏: ${hiddenControls.join(', ')}`));
+    const appId = String(options.appId || '');
+    const persistenceTokens = ['forgeflow-app', 'forgeflow-host', 'ready', 'init', 'save', 'forgeflow.appdata.', appId];
+    const absent = persistenceTokens.filter((token) => !js.includes(token));
+    checks.push(result('persistence-bridge', '业务数据持久化契约', absent.length === 0, `缺少 postMessage 持久化标识: ${absent.join(', ')}`));
+  }
   return checks;
 }
 
-export function validateGeneratedBundle(prompt, artifact) {
+export function validateGeneratedBundle(prompt, artifact, options = {}) {
   const files = artifact && artifact.files;
   const checks = [];
   const missing = GENERATED_FILES.filter((name) => typeof (files || {})[name] !== 'string' || !files[name].trim());
@@ -63,7 +83,7 @@ export function validateGeneratedBundle(prompt, artifact) {
     const forbidden = FORBIDDEN_JS.filter(([token]) => js.includes(token));
     checks.push(result('js-safety', 'JavaScript 安全约束', forbidden.length === 0, forbidden.map(([, reason]) => reason).join('；')));
     checks.push(result('script-escape', '脚本标签不可逃逸', !/<\/?script/i.test(js), 'app.js 中出现 script 标签文本'));
-    checks.push(...semanticChecks(prompt, html, js));
+    checks.push(...semanticChecks(prompt, html, js, options));
     const total = GENERATED_FILES.reduce((sum, name) => sum + files[name].length, 0);
     checks.push(result('bundle-size', '生成包体积', total <= 400_000, `生成文件总计 ${total} 字符，超过 400000`));
   }

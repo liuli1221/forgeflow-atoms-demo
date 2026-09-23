@@ -3,12 +3,6 @@ import { el, clear } from './dom.js';
 import { formatTime } from '../core/util.js';
 import { RUN_STAGES } from '../core/planner.js';
 
-const VIEW_OPTIONS = [
-  ['cards', '卡片视图'],
-  ['table', '表格视图'],
-  ['list', '列表视图'],
-];
-
 export function renderPlan(container, project, handlers) {
   clear(container);
 
@@ -29,8 +23,8 @@ export function renderPlan(container, project, handlers) {
       el('p', {
         class: 'sub',
         text: project.spec
-          ? `${project.spec.appName} · ${project.spec.fields.length} 字段 · ${project.versions.length} 个版本。继续在左侧输入修改要求即可生成新版本。`
-          : '在左侧输入一句话描述，Agent 会先给出可编辑的实施计划，你批准后才会生成代码。',
+          ? `${project.spec.appName} · DeepSeek 应用 · ${project.versions.length} 个版本。继续在左侧输入修改要求即可生成新版本。`
+          : '在左侧输入一句话描述，Agent 会先给出实施计划，你批准后才会调用 DeepSeek 生成代码。',
       }),
     ]);
     container.appendChild(box);
@@ -57,9 +51,8 @@ export function renderPlan(container, project, handlers) {
   }
 
   const box = el('div', { class: 'card-box' });
-  const llmPlan = plan.engine === 'deepseek';
-  box.appendChild(el('h3', { text: llmPlan ? '真实 LLM 实施计划（待批准）' : plan.mode === 'modify' ? '增量修改计划（待批准）' : '实施计划（待批准）' }));
-  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · ${llmPlan ? '批准后调用 DeepSeek，失败会自动修复且不会覆盖当前版本' : '本地规则引擎产出，批准后才会写入版本'}` }));
+  box.appendChild(el('h3', { text: 'DeepSeek 实施计划（待批准）' }));
+  box.appendChild(el('p', { class: 'sub', text: `生成于 ${formatTime(plan.createdAt)} · 批准后调用 DeepSeek，失败会自动修复且不会覆盖当前版本` }));
 
   const grid = el('div', { class: 'plan-grid' });
   for (const cell of plan.summary) {
@@ -93,36 +86,8 @@ export function renderPlan(container, project, handlers) {
       document.createTextNode(` ${f.type}${f.required ? ' *' : ''}`),
     ]));
   }
-  if (!llmPlan) {
-    box.appendChild(el('div', { class: 'plan-edit' }, [
-      el('div', { class: 'row' }, [
-        el('label', { class: 'field' }, [
-          el('span', { text: '应用名称（可改）' }),
-          el('input', { id: 'plan-app-name', type: 'text', value: plan.appName, maxlength: '40' }),
-        ]),
-        el('label', { class: 'field' }, [
-          el('span', { text: '默认视图' }),
-          (() => {
-            const sel = el('select', { id: 'plan-view' });
-            const current = findSummary(plan, '默认视图');
-            for (const [value, label] of VIEW_OPTIONS) {
-              sel.appendChild(el('option', { value, text: label, selected: label.startsWith(current) }));
-            }
-            return sel;
-          })(),
-        ]),
-      ]),
-      el('div', { class: 'row' }, [
-        checkbox('plan-search', '搜索', planFlag(plan, 'search')),
-        checkbox('plan-filters', '筛选', planFlag(plan, 'filters')),
-        checkbox('plan-stats', '统计', planFlag(plan, 'stats')),
-        checkbox('plan-dark', '暗色主题', findSummary(plan, '主题') === '暗色'),
-      ]),
-      chips,
-    ]));
-  } else {
-    box.appendChild(el('p', { class: 'sub', text: '模型只在批准后调用。生成结果必须通过文件完整性、语法、安全和应用专项契约检查。' }));
-  }
+  if (plan.fields && plan.fields.length) box.appendChild(chips);
+  box.appendChild(el('p', { class: 'sub', text: '模型只在批准后调用。生成结果必须通过文件完整性、语法、安全、持久化和应用专项契约检查。' }));
 
   if (plan.notes && plan.notes.length) {
     box.appendChild(el('p', { class: 'sub', text: '备注：' + plan.notes.join(' ') }));
@@ -131,7 +96,7 @@ export function renderPlan(container, project, handlers) {
   box.appendChild(el('div', { class: 'plan-actions' }, [
     el('button', {
       class: 'btn primary', type: 'button', text: '批准并执行', disabled: running,
-      onclick: () => handlers.onApprove(collectOverrides()),
+      onclick: () => handlers.onApprove(),
     }),
     el('button', {
       class: 'btn ghost', type: 'button', text: '取消计划', disabled: running,
@@ -140,34 +105,6 @@ export function renderPlan(container, project, handlers) {
   ]));
 
   container.appendChild(box);
-}
-
-function planFlag(plan, key) {
-  const label = key === 'search' ? '搜索' : key === 'filters' ? '筛选' : '统计';
-  return plan.modules.some((m) => m.startsWith(label));
-}
-
-function findSummary(plan, label) {
-  const hit = plan.summary.find((s) => s.label === label);
-  return hit ? String(hit.value) : '';
-}
-
-function checkbox(id, label, checked) {
-  const input = el('input', { id, type: 'checkbox' });
-  input.checked = !!checked;
-  return el('label', { class: 'inline' }, [input, label]);
-}
-
-function collectOverrides() {
-  const get = (id) => document.getElementById(id);
-  return {
-    appName: get('plan-app-name') ? get('plan-app-name').value : undefined,
-    view: get('plan-view') ? get('plan-view').value : undefined,
-    themeMode: get('plan-dark') && get('plan-dark').checked ? 'dark' : 'light',
-    showSearch: get('plan-search') ? get('plan-search').checked : undefined,
-    showFilters: get('plan-filters') ? get('plan-filters').checked : undefined,
-    showStats: get('plan-stats') ? get('plan-stats').checked : undefined,
-  };
 }
 
 const ICONS = { pending: '·', running: '', done: '✓', failed: '✕', cancelled: '⊘' };

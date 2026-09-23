@@ -20,7 +20,7 @@ export function generateHtml(spec) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${name}</title>
-  <meta name="generator" content="ForgeFlow Local Agent" />
+  <meta name="generator" content="ForgeFlow deterministic demo snapshot" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -51,7 +51,7 @@ export function generateHtml(spec) {
     <p id="empty" class="empty" hidden></p>
 
     <footer class="app-footer">
-      <span>由 ForgeFlow 本地 Agent 生成 · 无需 API Key</span>
+      <span>ForgeFlow 预置演示 · 数据保存在当前浏览器</span>
       <button id="reset-btn" class="btn link" type="button">重置为示例数据</button>
     </footer>
   </div>

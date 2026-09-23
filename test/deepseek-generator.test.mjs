@@ -10,7 +10,7 @@ function responseFor(artifact, id) {
       return {
         id,
         status: 'completed',
-        output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(artifact) }] }],
+        output: [{ type: 'message', content: [{ type: 'output_text', text: typeof artifact === 'string' ? artifact : JSON.stringify(artifact) }] }],
         usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
       };
     },
@@ -68,4 +68,24 @@ test('认证失败立即返回，不进入无意义的自动修复', async () =>
   assert.equal(calls, 1);
   assert.equal(result.attempts.length, 1);
   assert.match(result.error, /Authentication Fails/);
+});
+
+test('非法 JSON 会把原始输出和错误交给下一轮自动修复', async () => {
+  const bodies = [];
+  let calls = 0;
+  const fakeFetch = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    calls += 1;
+    return responseFor(calls === 1 ? '```json\n{"appName":"被截断"' : makeArtifactFixture('calculator'), `resp_json_${calls}`);
+  };
+
+  const result = await generateWithDeepSeek(
+    { prompt: '生成一个计算器', mode: 'create', appId: 'app_json_repair' },
+    { apiKey: 'not-a-real-key', fetch: fakeFetch, maxAttempts: 2 },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(calls, 2);
+  assert.match(bodies[1].input, /不是合法 JSON/);
+  assert.match(bodies[1].input, /被截断/);
 });

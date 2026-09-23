@@ -22,7 +22,7 @@ export async function executeLlmRun(ctx, hooks = {}) {
 
   emit('analyze', 'running', '正在识别应用行为与交互边界');
   if (shouldCancel()) return { ok: false, cancelled: true, events, error: '已取消', files: null, version: null, checks: [] };
-  emit('analyze', 'done', '使用 DeepSeek 处理开放式应用需求');
+  emit('analyze', 'done', '使用 DeepSeek 统一理解应用需求');
   emit('plan', 'running');
   emit('plan', 'done', '完整源码 → 校验 → 自动修复 → READY 版本');
   emit('generate', 'running', '正在调用 DeepSeek，首次生成可能需要几十秒');

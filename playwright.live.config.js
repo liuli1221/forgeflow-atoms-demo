@@ -23,6 +23,7 @@ export default defineConfig({
     env: {
       FORGEFLOW_DATA_FILE: '.data/e2e-llm-sync.json',
       FORGEFLOW_SESSION_SECRET: 'forgeflow-e2e-llm-secret',
+      DEEPSEEK_TIMEOUT_MS: '60000',
     },
   },
 });

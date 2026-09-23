@@ -25,14 +25,19 @@ export function createPreviewBridge({ frame, emptyNode, storage, onLog, onSaved 
     if (frame.contentWindow && ev.source !== frame.contentWindow) return;
 
     if (msg.type === 'ready') {
-      const data = storage.getAppData(msg.appId);
+      if (!currentAppId || msg.appId !== currentAppId) {
+        onLog && onLog('warn', `[preview] 拒绝非法应用 id: ${String(msg.appId)}`);
+        return;
+      }
+      const data = storage.getAppData(currentAppId);
       post({ source: 'forgeflow-host', type: 'init', data });
-      onLog && onLog('info', `[preview] app ready (${msg.appId})，已注入 ${data && data.items ? data.items.length : 0} 条历史数据`);
+      onLog && onLog('info', `[preview] app ready (${currentAppId})，已注入 ${data && data.items ? data.items.length : 0} 条历史数据`);
       return;
     }
 
     if (msg.type === 'save') {
-      if (typeof msg.key !== 'string' || msg.key.indexOf(APP_DATA_PREFIX) !== 0) {
+      const expectedKey = currentAppId ? APP_DATA_PREFIX + currentAppId : '';
+      if (typeof msg.key !== 'string' || !expectedKey || msg.key !== expectedKey) {
         onLog && onLog('warn', `[preview] 拒绝非法存储 key: ${String(msg.key)}`);
         return;
       }

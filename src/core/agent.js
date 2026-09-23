@@ -1,5 +1,5 @@
 /**
- * Local Agent orchestration (finite state machine).
+ * Deterministic demo/legacy orchestration (finite state machine).
  *
  * States: idle -> analyzing -> awaiting_approval -> running -> ready | failed | cancelled
  *

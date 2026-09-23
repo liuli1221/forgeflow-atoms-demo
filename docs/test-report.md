@@ -1,7 +1,7 @@
 # 测试报告
 
 - 项目：ForgeFlow（`w/atomlite-workbuddy`）
-- 更新日期：2026-09-22
+- 更新日期：2026-09-23
 - 环境：macOS (darwin-arm64) · Node v26.0.0 · Chrome
 - 命令：`npm run test:unit` / `npm run test:e2e` / `npm run test:e2e:llm`
 
@@ -13,9 +13,9 @@
 
 ```
 $ npm run test:unit
-# tests 82
+# tests 85
 # suites 0
-# pass 82
+# pass 85
 # fail 0
 # cancelled 0
 # skipped 0
@@ -33,18 +33,19 @@ $ npm run test:e2e
 | `test/generator.test.mjs` | 9 | ✅ | `core/generator/*` + `core/validator.js` |
 | `test/versions.test.mjs` | 6 | ✅ | `core/versions.js`（版本/恢复） |
 | `test/storage.test.mjs` | 8 | ✅ | `core/storage.js`（持久化/导入导出） |
+| `test/preview-bridge.test.mjs` | 1 | ✅ | iframe 只能按当前 appId 读取/写入业务数据 |
 | `test/agent.test.mjs` | 11 | ✅ | `core/agent.js`（状态机/六阶段/取消） |
 | `test/hidden-visibility.test.mjs` | 9 | ✅ | **hidden 显隐回归（本次 P0 bugfix）** |
 | `test/sync-store.test.mjs` | 1 | ✅ | 注册/登录/密码哈希/快照/revision 冲突 |
-| `test/llm-plan.test.mjs` | 2 | ✅ | 计算器/贪吃蛇强制 LLM 路由，已知 CRUD 保留本地路径 |
-| `test/llm-validator.test.mjs` | 3 | ✅ | 计算器/贪吃蛇契约与危险 API 门禁 |
-| `test/deepseek-generator.test.mjs` | 3 | ✅ | 自动修复、缺 Key、认证失败立即停止 |
+| `test/llm-plan.test.mjs` | 2 | ✅ | 创建/修改均统一走 DeepSeek，并保留 appId |
+| `test/llm-validator.test.mjs` | 4 | ✅ | 计算器/贪吃蛇/CRUD 持久化契约与危险 API 门禁 |
+| `test/deepseek-generator.test.mjs` | 4 | ✅ | 契约修复、无效 JSON 修复、缺 Key、认证失败立即停止 |
 | `test/generation-guard.test.mjs` | 4 | ✅ | 每客户端时窗、全站每日预算、并发令牌、环境配置 |
 | `test/vercel-api.test.mjs` | 3 | ✅ | Vercel health、方法门禁、prompt 前置校验 |
-| 单元与服务端合计 | **82** | **82 pass / 0 fail** | |
-| `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome：生成/CRUD/刷新/跨浏览器账号同步/页面错误 |
-| `e2e-live/llm-apps.spec.js` | 2 | ✅ | 真实 DeepSeek：计算器 `7+5=12`、贪吃蛇启动/方向键 |
-| `playwright.production.config.js` + `e2e-live/llm-apps.spec.js` | 2 | ✅ | Vercel Production：同一套计算器/贪吃蛇浏览器 E2E |
+| 单元与服务端合计 | **85** | **85 pass / 0 fail** | |
+| `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome + 确定性 API 替身：普通任务确实请求 `/api/generate`、CRUD、刷新、账号同步、页面错误 |
+| `e2e-live/llm-apps.spec.js` | 3 | ⚠️ | 真实 DeepSeek：三个用例分别通过；最近一次合并运行第三个请求发生外部超时 |
+| `playwright.production.config.js` + `e2e-live/llm-apps.spec.js` | 3 | 待发布后重验 | Vercel Production：计算器、贪吃蛇、任务 CRUD/刷新 |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -123,13 +124,16 @@ $ npm run test:e2e
 
 ### 2.9 `e2e/forgeflow.spec.js`（2）
 
-真实 Chrome 覆盖 custom Schema 生成、计划审批、预览 CRUD、整页刷新恢复、账号注册上传、第二浏览器登录下载恢复，以及首屏 `pageerror` 冒烟检查。
+真实 Chrome 拦截 `/api/generate` 并返回确定性 DeepSeek 协议替身，覆盖普通任务需求确实进入 API、计划审批、
+预览 CRUD、整页刷新恢复、账号注册上传、第二浏览器登录下载恢复，以及首屏 `pageerror` 冒烟检查。这里验证的是
+浏览器到 API 再到 UI/持久化的稳定回归，不冒充真实模型调用；真实模型由单独的 live 套件验证。
 
-### 2.10 LLM 生成与修复（8）
+### 2.10 LLM 生成与修复（10）
 
-- 计算器、贪吃蛇与行为型需求强制走 DeepSeek，不允许 generic CRUD；已知任务 CRUD 仍走快速确定性路径。
-- 三文件生成包必须通过 HTML、JS 语法、安全与专项交互契约。
+- task CRUD、计算器、贪吃蛇以及修改请求全部走 DeepSeek，不存在 generic CRUD 或本地模板分流。
+- 三文件生成包必须通过 HTML、JS 语法、安全、专项交互与数据持久化契约。
 - fake transport 首轮返回缺少计算器契约的代码，第二轮断言修复 prompt 包含确定性校验错误，并成功产出 READY 结果。
+- fake transport 返回代码围栏/无效 JSON 时，确定性提取器会尝试去围栏与截取对象；仍失败则把原始响应带入下一轮修复。
 - 没有 Key 时不请求模型；401 认证失败只请求一次，不进入无意义的代码修复。
 
 ### 2.11 公网生成保护（4）
@@ -139,11 +143,12 @@ $ npm run test:e2e
 - 每日预算跨客户端生效，并在 UTC 次日重置；
 - Vercel/本地环境变量可调整三类限制，异常值回落到安全默认值。
 
-### 2.12 Vercel Production 验收（2026-09-23）
+### 2.12 Vercel Production 既有版本验收（2026-09-23）
 
 - `GET https://forgeflow-atoms-demo.vercel.app/api/health` 返回 `runtime=vercel-function`、`storage=browser`、`llm.configured=true`；
 - 线上 `POST /api/generate` 真实调用 DeepSeek，计算器首轮通过确定性校验并返回三个源码文件；
-- `npm run test:e2e:production`：计算器实际点击 `7 + 5 =` 得到 `12`，贪吃蛇启动后状态为 `running` 并响应方向键，**2/2 通过**。
+- 上一版 `npm run test:e2e:production`：计算器实际点击 `7 + 5 =` 得到 `12`，贪吃蛇启动后状态为 `running` 并响应方向键，**2/2 通过**。
+- 本次统一 DeepSeek 路由发布后，Production 套件将扩为 3 条，并增加普通任务 CRUD 与刷新恢复；发布前不把它写成已通过。
 
 ---
 
@@ -227,9 +232,9 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 
 `npm run test:e2e` 实际完成 2/2：
 
-1. 新建未知领域“宠物档案”并从五个显式字段生成 custom AppSpec；批准后生成 v1；
-2. 在 sandbox 预览中新增“团子”，整页刷新后项目与业务数据仍在；
-3. 注册账号并上传；创建第二个独立浏览器上下文，登录同一账号并下载；项目、版本及“团子”均恢复；
+1. 新建普通“面试任务管理器”，断言请求实际到达 `/api/generate`，且 mode 为 `create`；
+2. 使用符合 DeepSeek 返回协议的确定性 fixture 生成 v1，在 sandbox 预览中新增任务，整页刷新后项目与业务数据仍在；
+3. 注册账号并上传；创建第二个独立浏览器上下文，登录同一账号并下载；项目、版本及新增任务均恢复；
 4. 独立冒烟用例检查页面标题、首屏关键按钮和 `pageerror`；
 5. Playwright 启动真实本机 Chrome，失败保留 trace 与截图。
 
@@ -240,12 +245,16 @@ UA 样式表   [hidden] { display: none }      特异性 (0,1,0)
 - `src/ui/*` 没有细粒度单元测试；核心 UI 主链由 E2E 覆盖。
 - 无可访问性专项审计、无跨浏览器兼容性测试。
 
-### 4.4 已执行并通过：真实 DeepSeek E2E
+### 4.4 已执行：真实 DeepSeek E2E
 
-`npm run test:e2e:llm` 于 2026-09-22 实际启动 Chrome，并分别从自然语言创建计算器和贪吃蛇项目。
-两个用例都进入 `DeepSeek LLM` 计划与 `/api/generate`，生成 READY v1，最终 **2/2 通过**：计算器实际点击
-`7 + 5 =` 并断言 `12`；贪吃蛇实际启动、断言状态为 `running` 并发送方向键。
-该 live 套件单独运行，会产生真实 API 用量，不包含在 `npm run test:all` 中。
+`npm run test:e2e:llm` 现在从自然语言分别创建计算器、贪吃蛇和任务管理器。三个用例都进入
+`DeepSeek LLM` 计划与 `/api/generate`：计算器实际点击 `7 + 5 =` 并断言 `12`；贪吃蛇启动、断言状态为
+`running` 并发送方向键；任务管理器新增数据后整页刷新并断言恢复。
+
+三个用例都已在最终代码上分别通过。最近一次三条合并执行时，计算器和贪吃蛇通过，第三个 DeepSeek 请求在
+210 秒内没有返回，页面仍停在 generate running，因此该次结果不是 3/3。服务端单次模型调用上限随后从
+120 秒收紧到 60 秒，避免无限等待；没有用重试结果掩盖外部模型延迟。该 live 套件会产生真实 API 用量，
+不包含在 `npm run test:all` 中。
 
 ## 5. 已执行的非单测验证
 
@@ -269,4 +278,4 @@ $ curl -s http://127.0.0.1:4173/src/styles/base.css | grep hidden
 - `pages-build-deployment` 成功完成；公开 URL 返回 ForgeFlow 页面而非 404。
 - 在公开 URL 上点击「直接看预置演示」，预置项目、15 项校验结果、预览 iframe 与示例数据均成功加载。
 
-公网 Pages 仍是静态本地模式；账号同步 E2E 针对 Node 服务模式。Playwright 配置现已进入仓库，可在具备 Chrome 的 CI 环境重复运行。
+公网 Pages 只能体验预置项目，不能创建或修改应用；完整生成链路使用 Vercel。账号同步 E2E 针对本地 Node 服务模式。Playwright 配置现已进入仓库，可在具备 Chrome 的 CI 环境重复运行。

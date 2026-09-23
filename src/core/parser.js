@@ -1,5 +1,5 @@
 /**
- * Prompt -> AppSpec parser (the "Local Agent" understanding stage).
+ * Prompt -> AppSpec parser for deterministic demo seeds and legacy fixtures.
  *
  * This is a deterministic, rule-based natural-language parser. It is NOT an
  * LLM and never pretends to be one: it scores domain keywords, detects feature

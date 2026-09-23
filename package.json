@@ -2,7 +2,7 @@
   "name": "forgeflow",
   "version": "0.1.0",
   "private": true,
-  "description": "ForgeFlow - a hybrid local and DeepSeek-powered app builder with validation and repair.",
+  "description": "ForgeFlow - a DeepSeek-powered app builder with deterministic validation, repair, versioning, and persistence guards.",
   "type": "module",
   "scripts": {
     "start": "node server.mjs",

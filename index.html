@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>ForgeFlow · Hybrid Agent 应用工作台</title>
-  <meta name="description" content="用自然语言或显式字段 Schema 生成真实可交互的小型网页应用，支持版本、浏览器持久化与可选账号同步。" />
+  <title>ForgeFlow · DeepSeek Agent 应用工作台</title>
+  <meta name="description" content="用自然语言通过 DeepSeek 生成真实可交互的小型网页应用，支持确定性校验、自动修复、版本与浏览器持久化。" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f6bed'/%3E%3Cpath d='M9 22V10h13v3h-9v2.5h8V18h-8v4z' fill='white'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./src/styles/base.css" />
   <link rel="stylesheet" href="./src/styles/workbench.css" />
@@ -18,29 +18,29 @@
         <span class="logo">FF</span>
         <div>
           <h1>ForgeFlow</h1>
-          <p class="brand-sub">自然语言 → 可交互网页应用的本地工作台</p>
+          <p class="brand-sub">自然语言 → DeepSeek → 可交互网页应用</p>
         </div>
       </div>
 
       <p class="lede">
-        描述你想要的小工具，ForgeFlow 会为数据管理类应用使用确定性生成器，为游戏和工具类应用调用
-        <strong>真实 DeepSeek LLM</strong>，等你确认计划后再生成 HTML / CSS / JS 源码并加载可操作预览。
+        描述你想要的应用，ForgeFlow 会统一调用 <strong>真实 DeepSeek LLM</strong> 理解需求并生成
+        HTML / CSS / JS；确定性代码负责安全校验、自动修复、版本和持久化。
       </p>
 
       <ul class="value-list">
-        <li><b>真实生成</b>：支持 8 类稳定蓝图；计算器、贪吃蛇等开放应用由 DeepSeek 生成真实源码。</li>
-        <li><b>先计划后执行</b>：计划可编辑、可检查，点击批准才会动手。</li>
+        <li><b>统一生成</b>：任务管理、计算器、贪吃蛇及未知类型都由 DeepSeek 生成真实源码。</li>
+        <li><b>先计划后执行</b>：先检查目标与执行步骤，点击批准后才会调用模型。</li>
         <li><b>真实可交互</b>：生成的应用支持增删改查、搜索、筛选、统计，数据刷新后仍在。</li>
         <li><b>版本可回溯</b>：每次成功生成形成一个版本，可预览、可一键恢复。</li>
       </ul>
 
       <div class="honesty">
-        <span class="pill">Hybrid Agent</span>
-        <span class="pill">DeepSeek 服务端调用</span>
+        <span class="pill">DeepSeek Agent</span>
+        <span class="pill">统一服务端调用</span>
         <span class="pill">可选账号同步</span>
         <p>
-          说明：CRUD 类需求优先走本地确定性流水线；游戏、计算器和未知类型走服务端 DeepSeek。
-          API Key 只保存在服务端，浏览器无法读取；生成失败不会静默改成通用条目管理器。
+          说明：所有自然语言创建与修改都走服务端 DeepSeek。API Key 只保存在服务端，浏览器无法读取；
+          生成结果必须通过确定性校验，失败会自动修复，不会静默套用模板。
         </p>
       </div>
 
@@ -57,7 +57,7 @@
       <div class="topbar-left">
         <span class="logo sm">FF</span>
         <strong class="product">ForgeFlow</strong>
-        <span id="agent-badge" class="badge">Hybrid Agent · 检查服务中</span>
+        <span id="agent-badge" class="badge">DeepSeek Agent · 检查服务中</span>
       </div>
       <div class="topbar-right">
         <span id="project-title" class="project-title"></span>

@@ -16,9 +16,9 @@ npm run test:e2e:llm
 npm run test:e2e:production
 ```
 
-最近一次实际结果：82/82 unit/service/function、2/2 离线 Chrome E2E、2/2 本地真实 DeepSeek E2E、
-2/2 Vercel Production E2E。
-live 套件会产生真实 API 用量。
+当前本地结果：85/85 unit/service/function、2/2 离线 Chrome E2E。真实 DeepSeek 套件包含计算器、贪吃蛇和
+任务管理器三条：三条分别通过；最近一次合并运行的第三条遇到外部请求超时，未记作 3/3。统一路由版本发布后
+再执行 3 条 Vercel Production E2E。live 套件会产生真实 API 用量。
 
 ## 2. 导入 GitHub 仓库
 
@@ -35,7 +35,7 @@ live 套件会产生真实 API 用量。
 DEEPSEEK_API_KEY=<只填写在 Vercel Secret 中>
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_TIMEOUT_MS=120000
+DEEPSEEK_TIMEOUT_MS=60000
 FORGEFLOW_GENERATE_PER_HOUR=5
 FORGEFLOW_GENERATE_DAILY=30
 FORGEFLOW_GENERATE_CONCURRENCY=2
@@ -61,7 +61,8 @@ Function 在调用 DeepSeek 前执行匿名客户端时窗、每日次数和并�
    `llm.configured: true`。
 2. 新建计算器并实际点击 `7 + 5 =`，显示 `12`。
 3. 新建贪吃蛇，点击开始后状态为 `running`，方向键可控制。
-4. 刷新浏览器，项目、版本和生成应用仍存在。
-5. 查看 Network，浏览器只请求同源 `/api/generate`，响应和日志中没有 API Key。
+4. 新建普通任务管理器，新增一条任务后刷新，项目、版本和任务数据仍存在。
+5. 对任务管理器发送修改指令，确认仍请求同源 `/api/generate`，没有切换到本地模板。
+6. 查看 Network，浏览器只请求同源 `/api/generate`，响应和日志中没有 API Key。
 
 GitHub Pages 只能标注为静态降级版；交给面试官的完整验收链接使用 Vercel Production URL。
