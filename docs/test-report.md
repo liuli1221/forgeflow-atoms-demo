@@ -45,7 +45,7 @@ $ npm run test:e2e
 | 单元与服务端合计 | **85** | **85 pass / 0 fail** | |
 | `e2e/forgeflow.spec.js` | 2 | ✅ | 真实 Chrome + 确定性 API 替身：普通任务确实请求 `/api/generate`、CRUD、刷新、账号同步、页面错误 |
 | `e2e-live/llm-apps.spec.js` | 3 | ⚠️ | 真实 DeepSeek：三个用例分别通过；最近一次合并运行第三个请求发生外部超时 |
-| `playwright.production.config.js` + `e2e-live/llm-apps.spec.js` | 3 | 待发布后重验 | Vercel Production：计算器、贪吃蛇、任务 CRUD/刷新 |
+| `playwright.production.config.js` + `e2e-live/llm-apps.spec.js` | 3 | ✅ | Vercel Production：计算器、贪吃蛇、任务 CRUD/刷新，3/3 通过 |
 
 `core` 层完全 DOM-free，Node 可直接 `import`，不需要 jsdom。
 
@@ -143,12 +143,13 @@ $ npm run test:e2e
 - 每日预算跨客户端生效，并在 UTC 次日重置；
 - Vercel/本地环境变量可调整三类限制，异常值回落到安全默认值。
 
-### 2.12 Vercel Production 既有版本验收（2026-09-23）
+### 2.12 Vercel Production 验收（2026-09-23）
 
 - `GET https://forgeflow-atoms-demo.vercel.app/api/health` 返回 `runtime=vercel-function`、`storage=browser`、`llm.configured=true`；
 - 线上 `POST /api/generate` 真实调用 DeepSeek，计算器首轮通过确定性校验并返回三个源码文件；
-- 上一版 `npm run test:e2e:production`：计算器实际点击 `7 + 5 =` 得到 `12`，贪吃蛇启动后状态为 `running` 并响应方向键，**2/2 通过**。
-- 本次统一 DeepSeek 路由发布后，Production 套件将扩为 3 条，并增加普通任务 CRUD 与刷新恢复；发布前不把它写成已通过。
+- 统一 DeepSeek 路由发布后，`npm run test:e2e:production` **3/3 通过**：计算器实际点击 `7 + 5 =` 得到
+  `12`；贪吃蛇启动后状态为 `running` 并响应方向键；任务管理器新增“复习 Agent 工程护栏”后整页刷新，
+  项目、版本和业务数据均恢复。三条请求都访问线上 `/api/generate`，不使用 mock。
 
 ---
 

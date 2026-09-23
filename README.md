@@ -46,7 +46,7 @@ npm run test:e2e:production # 直接验收 Vercel Production URL
 npm run test:all
 ```
 
-当前本地回归：**85/85 单元/服务端用例 + 2/2 离线 Playwright Chrome E2E 通过**。真实 LLM 套件覆盖计算器、贪吃蛇和任务管理器：三个用例均在最终代码上分别通过；最近一次合并运行中，计算器和贪吃蛇通过，任务管理器遇到一次 DeepSeek 请求超时，因此没有把它写成虚假的 3/3。live 套件要求有效的 `DEEPSEEK_API_KEY`，不使用 mock，也不纳入默认回归。线上统一路由版本发布后会重新执行 Production E2E。
+当前：**85/85 单元/服务端用例 + 2/2 离线 Playwright Chrome E2E + 3/3 Vercel Production 真实 DeepSeek E2E 全部通过**。Production 套件实际生成并操作计算器、贪吃蛇和任务管理器，并验证任务数据刷新恢复；它不使用 mock，会产生真实 API 用量。离线 E2E 使用确定性 API fixture 验证稳定的浏览器主链，不冒充模型调用。
 详见 [docs/test-report.md](docs/test-report.md)。
 
 ---

@@ -16,9 +16,8 @@ npm run test:e2e:llm
 npm run test:e2e:production
 ```
 
-当前本地结果：85/85 unit/service/function、2/2 离线 Chrome E2E。真实 DeepSeek 套件包含计算器、贪吃蛇和
-任务管理器三条：三条分别通过；最近一次合并运行的第三条遇到外部请求超时，未记作 3/3。统一路由版本发布后
-再执行 3 条 Vercel Production E2E。live 套件会产生真实 API 用量。
+当前结果：85/85 unit/service/function、2/2 离线 Chrome E2E、3/3 Vercel Production 真实 DeepSeek E2E。
+Production 套件覆盖计算器、贪吃蛇和任务管理器新增/刷新恢复；live 套件会产生真实 API 用量。
 
 ## 2. 导入 GitHub 仓库
 
