@@ -9,7 +9,7 @@ function event(stage, status, detail, label) {
 
 function neutralError(value) {
   return String(value || '')
-    .replace(/deepseek/gi, 'AI 服务')
+    .replace(/deepseek(?:-[A-Za-z0-9._-]+)?/gi, 'AI 服务')
     .replace(/\bLLM\b/gi, 'AI 服务');
 }
 

@@ -5,7 +5,8 @@ import { RUN_STAGES } from '../core/planner.js';
 
 function neutralizeAgentCopy(value) {
   return String(value || '')
-    .replace(/DeepSeek(?:\s+LLM|\s+Agent)?/gi, 'AI Agent')
+    .replace(/DeepSeek(?:-[A-Za-z0-9._-]+|\s+(?:LLM|Agent))?/gi, 'AI Agent')
+    .replace(/AI Agent-[A-Za-z0-9._-]+/gi, 'AI Agent')
     .replace(/\bLLM\b/gi, 'AI Agent');
 }
 
